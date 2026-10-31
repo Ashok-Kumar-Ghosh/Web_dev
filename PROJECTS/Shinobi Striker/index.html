@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shinobi Striker</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+    body {
+      background-color: #030002;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    #worldCanvas, #canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+
+    #worldCanvas { z-index: 1; }
+    #canvas { z-index: 2; pointer-events: none; }
+
+    #ui-container {
+      position: absolute;
+      top: 24px;
+      right: 28px;
+      z-index: 20;
+    }
+
+    #soundBtn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(15, 4, 8, 0.75);
+      border: 1px solid rgba(255, 100, 70, 0.4);
+      color: #ffaa5e;
+      padding: 10px 20px;
+      border-radius: 28px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+      transition: all 0.25s ease;
+      outline: none;
+    }
+    #soundBtn:hover {
+      background: rgba(30, 8, 16, 0.9);
+      border-color: #00ffff;
+      color: #00ffff;
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.35);
+      transform: scale(1.04);
+    }
+
+    .eq-wave {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      height: 12px;
+    }
+    .eq-bar {
+      width: 2.5px;
+      height: 100%;
+      background: #ffaa5e;
+      border-radius: 2px;
+      animation: eqBounce 0.8s ease-in-out infinite alternate;
+    }
+    .eq-bar:nth-child(2) { animation-delay: 0.2s; height: 60%; }
+    .eq-bar:nth-child(3) { animation-delay: 0.4s; height: 80%; }
+    .eq-paused .eq-bar {
+      animation: none !important;
+      height: 25% !important;
+      background: rgba(255, 170, 94, 0.4) !important;
+    }
+    @keyframes eqBounce {
+      0% { height: 25%; }
+      100% { height: 100%; }
+    }
+
+    /* LEFT-SIDE DOCK PANEL WITH SCROLL */
+    #leftPanel {
+      position: absolute;
+      top: 50%;
+      left: 36px;
+      transform: translateY(-50%);
+      z-index: 30;
+      width: 360px;
+      max-height: 86vh;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      background: rgba(8, 2, 7, 0.88);
+      border: 1px solid rgba(0, 240, 255, 0.35);
+      padding: 26px 18px 22px 18px;
+      border-radius: 22px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 0 40px rgba(0, 240, 255, 0.15), 0 20px 40px rgba(0, 0, 0, 0.8);
+      transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+    }
+
+    #leftPanel.hidden {
+      transform: translate(-140%, -50%);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .panel-header {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      padding-bottom: 12px;
+      gap: 10px;
+    }
+
+    .header-text {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .panel-title {
+      font-size: 19px;
+      font-weight: 900;
+      letter-spacing: 1.8px;
+      color: #00ffff;
+      text-shadow: 0 0 14px rgba(0, 240, 255, 0.5);
+      text-transform: uppercase;
+    }
+
+    .panel-subtitle {
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 1.4px;
+      color: #ffaa5e;
+      text-transform: uppercase;
+    }
+
+    /* WRAPPER FOR C++ BUTTON + CLOUD CALLOUT */
+    .cpp-btn-wrapper {
+      position: relative;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    /* FLOATING "CLICK HERE" CLOUD BUBBLE */
+    .click-cloud {
+      position: absolute;
+      bottom: calc(100% + 11px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #ffffff;
+      color: #050104;
+      font-size: 9.5px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      padding: 5px 11px;
+      border-radius: 20px;
+      white-space: nowrap;
+      box-shadow: 0 0 18px rgba(0, 240, 255, 0.95), 0 4px 10px rgba(0, 0, 0, 0.5);
+      border: 2px solid #00ffff;
+      pointer-events: none;
+      z-index: 40;
+      animation: cloudFloat 1.1s ease-in-out infinite alternate;
+    }
+
+    /* Cloud puffs for actual cloud shape */
+    .click-cloud::before {
+      content: "";
+      position: absolute;
+      top: -6px;
+      left: 14px;
+      width: 16px;
+      height: 12px;
+      background: #ffffff;
+      border-radius: 50%;
+      border-top: 2px solid #00ffff;
+      z-index: -1;
+    }
+
+    /* Pointer tail at bottom of cloud */
+    .click-cloud::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 6px;
+      border-style: solid;
+      border-color: #00ffff transparent transparent transparent;
+    }
+
+    @keyframes cloudFloat {
+      0% {
+        transform: translateX(-50%) translateY(0px) scale(1);
+      }
+      100% {
+        transform: translateX(-50%) translateY(-6px) scale(1.06);
+      }
+    }
+
+    /* HIGHLIGHTED "LEARN C++" PILL BUTTON */
+    .learn-cpp-btn {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 14px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.32) 0%, rgba(255, 170, 94, 0.25) 100%);
+      border: 2px solid #00ffff;
+      color: #ffffff;
+      cursor: pointer;
+      overflow: hidden;
+      box-shadow: 0 0 22px rgba(0, 240, 255, 0.65), inset 0 0 12px rgba(0, 240, 255, 0.25);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      outline: none;
+      animation: cppPulseGlow 1.6s infinite alternate;
+    }
+
+    @keyframes cppPulseGlow {
+      0% {
+        box-shadow: 0 0 14px rgba(0, 240, 255, 0.5), 0 0 4px rgba(255, 170, 94, 0.3), inset 0 0 10px rgba(0, 240, 255, 0.2);
+        border-color: #00ffff;
+      }
+      100% {
+        box-shadow: 0 0 28px rgba(0, 240, 255, 0.95), 0 0 16px rgba(255, 170, 94, 0.7), inset 0 0 16px rgba(0, 240, 255, 0.45);
+        border-color: #ffffff;
+      }
+    }
+
+    /* Continuous Shimmer Sweep Effect */
+    .learn-cpp-btn::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.45),
+        transparent
+      );
+      transform: skewX(-20deg);
+      animation: autoShimmer 2.5s infinite;
+    }
+
+    @keyframes autoShimmer {
+      0% { left: -100%; }
+      45%, 100% { left: 140%; }
+    }
+
+    .learn-cpp-btn:hover {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.45) 0%, rgba(255, 170, 94, 0.35) 100%);
+      border-color: #ffffff;
+      box-shadow: 0 0 32px rgba(0, 240, 255, 0.95), 0 0 14px rgba(255, 170, 94, 0.7);
+      transform: translateY(-2px) scale(1.06);
+    }
+
+    .learn-cpp-btn:active {
+      transform: translateY(0) scale(0.96);
+    }
+
+    .learn-cpp-btn .code-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #00ffff;
+      border: 1px solid #ffffff;
+      color: #050104;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 3px 5px;
+      border-radius: 6px;
+      box-shadow: 0 0 10px #00ffff;
+      transition: all 0.3s ease;
+    }
+
+    .learn-cpp-btn:hover .code-badge {
+      background: #ffffff;
+      color: #050104;
+      box-shadow: 0 0 14px #ffffff;
+    }
+
+    .learn-cpp-btn .btn-label {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      line-height: 1.05;
+    }
+
+    .learn-cpp-btn .sub-txt {
+      font-size: 8px;
+      font-weight: 900;
+      letter-spacing: 1.2px;
+      color: #ffaa5e;
+      text-transform: uppercase;
+      text-shadow: 0 0 6px rgba(255, 170, 94, 0.6);
+    }
+
+    .learn-cpp-btn .main-txt {
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.8px;
+      color: #ffffff;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      text-shadow: 0 0 12px rgba(0, 240, 255, 0.9);
+    }
+
+    .level-selector {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      overflow-y: auto;
+      padding-right: 6px;
+      max-height: 55vh;
+    }
+
+    .level-selector::-webkit-scrollbar { width: 5px; }
+    .level-selector::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); border-radius: 4px; }
+    .level-selector::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, 0.4); border-radius: 4px; }
+
+    .lvl-btn {
+      background: rgba(18, 5, 12, 0.85);
+      border: 1.5px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+      padding: 9px 13px;
+      border-radius: 11px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.2s ease;
+      outline: none;
+      flex-shrink: 0;
+    }
+
+    .lvl-btn .stage-info {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+
+    .lvl-btn .star-tag {
+      color: #ffd700;
+      font-size: 12px;
+      letter-spacing: 1px;
+      text-shadow: 0 0 6px rgba(255, 215, 0, 0.6);
+    }
+
+    .lvl-btn span {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #888;
+      letter-spacing: 0.5px;
+    }
+
+    .lvl-btn:hover {
+      border-color: #00ffff;
+      transform: translateX(4px);
+      background: rgba(0, 240, 255, 0.06);
+    }
+
+    .lvl-btn.active {
+      background: rgba(0, 240, 255, 0.16);
+      border-color: #00ffff;
+      color: #00ffff;
+      box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
+    }
+    .lvl-btn.active span { color: #00ffff; }
+
+    .lvl-btn.bonus-btn {
+      border-color: rgba(255, 170, 94, 0.35);
+      background: rgba(25, 10, 8, 0.85);
+    }
+    .lvl-btn.bonus-btn span { color: #ffaa5e; }
+    .lvl-btn.bonus-btn:hover { border-color: #ffaa5e; background: rgba(255, 170, 94, 0.1); }
+    .lvl-btn.bonus-btn.active {
+      background: rgba(255, 170, 94, 0.22);
+      border-color: #ffaa5e;
+      color: #ffaa5e;
+      box-shadow: 0 0 18px rgba(255, 170, 94, 0.4);
+    }
+
+    #playBtn {
+      background: #00ffff;
+      color: #050104;
+      border: none;
+      padding: 13px 20px;
+      border-radius: 28px;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.55);
+      transition: all 0.25s ease;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    #playBtn:hover {
+      background: #ffffff;
+      box-shadow: 0 0 30px rgba(255, 255, 255, 0.85);
+      transform: scale(1.03);
+    }
+  </style>
+</head>
+<body>
+
+  <audio id="bgMusic" src="bgm.mp3" loop preload="auto"></audio>
+
+  <div id="ui-container">
+    <button id="soundBtn" onclick="toggleAudio()">
+      <div class="eq-wave eq-paused" id="eqBars">
+        <div class="eq-bar"></div>
+        <div class="eq-bar"></div>
+        <div class="eq-bar"></div>
+      </div>
+      <span id="soundLabel">Sound Off</span>
+    </button>
+  </div>
+
+  <div id="leftPanel">
+    <div class="panel-header">
+      <div class="header-text">
+        <div class="panel-title">Shinobi Striker</div>
+        <div class="panel-subtitle">Select Training Round</div>
+      </div>
+
+      <!-- Highlighted "Learn C++" Button with "CLICK HERE!" Cloud Above It -->
+      <div class="cpp-btn-wrapper">
+        <div class="click-cloud">☁️ CLICK HERE!</div>
+        <a href="https://shinobi-striker.vercel.app/sindex.html" id="langSwitchBtn" class="learn-cpp-btn" title="Switch to C++ Mode" onclick="toggleLanguageMode()" >
+          
+          <span class="code-badge">&lt;/&gt;</span>
+          <div class="btn-label">
+            <span class="sub-txt">Mode</span>
+            <span class="main-txt">Learn C++</span>
+          </div>
+        </a>
+      </div>
+    </div>
+
+    <div class="level-selector" id="stageList"></div>
+
+    <button id="playBtn" onclick="startGame()">START MISSION</button>
+  </div>
+
+  <canvas id="worldCanvas"></canvas>
+  <canvas id="canvas"></canvas>
+
+  <script src="stickman.js"></script>
+
+  <script>
+    const stagesConfig = [
+      { id: '1', name: 'STAGE 1', pair: 'F & J (Index)', isBonus: false },
+      { id: '2', name: 'STAGE 2', pair: 'D & K (Middle)', isBonus: false },
+      { id: 'b2', name: 'BONUS STAGE 2', pair: 'F, J, D, K Review', isBonus: true },
+      { id: '3', name: 'STAGE 3', pair: 'S & L (Ring)', isBonus: false },
+      { id: 'b3', name: 'BONUS STAGE 3', pair: 'Home 6 Keys Review', isBonus: true },
+      { id: '4', name: 'STAGE 4', pair: 'A & ; (Pinky)', isBonus: false },
+      { id: 'b4', name: 'BONUS STAGE 4', pair: 'Full Home Row (8 Keys)', isBonus: true },
+      { id: '5', name: 'STAGE 5', pair: 'G & H (Inner Index)', isBonus: false },
+      { id: 'b5', name: 'BONUS STAGE 5', pair: 'Complete Home + G, H', isBonus: true },
+      { id: '6', name: 'STAGE 6', pair: 'R & U (Top Index)', isBonus: false },
+      { id: 'b6', name: 'BONUS STAGE 6', pair: 'Home + R, U Review', isBonus: true },
+      { id: '7', name: 'STAGE 7', pair: 'E & I (Top Middle)', isBonus: false },
+      { id: 'b7', name: 'BONUS STAGE 7', pair: 'Home + Top (E, I, R, U)', isBonus: true },
+      { id: '8', name: 'STAGE 8', pair: 'W & O (Top Ring)', isBonus: false },
+      { id: 'b8', name: 'BONUS STAGE 8', pair: 'Unlocked 16 Keys', isBonus: true },
+      { id: '9', name: 'STAGE 9', pair: 'Q & P (Top Pinky)', isBonus: false },
+      { id: 'b9', name: 'BONUS STAGE 9', pair: 'Unlocked 18 Keys', isBonus: true },
+      { id: '10', name: 'STAGE 10', pair: 'T & Y (Top Center)', isBonus: false },
+      { id: 'b10', name: 'BONUS STAGE 10', pair: 'Full Top + Home Row', isBonus: true },
+      { id: '11', name: 'STAGE 11', pair: 'V & M (Bottom Index)', isBonus: false },
+      { id: 'b11', name: 'BONUS STAGE 11', pair: 'Unlocked 22 Keys', isBonus: true },
+      { id: '12', name: 'STAGE 12', pair: 'C & , (Bottom Middle)', isBonus: false },
+      { id: 'b12', name: 'BONUS STAGE 12', pair: 'Unlocked 24 Keys', isBonus: true },
+      { id: '13', name: 'STAGE 13', pair: 'X & . (Bottom Ring)', isBonus: false },
+      { id: 'b13', name: 'BONUS STAGE 13', pair: 'ALL 26 KEYS MASTER', isBonus: true }
+    ];
+
+    let chosenLevel = '1';
+
+    function toggleLanguageMode() {
+      const btn = document.getElementById('langSwitchBtn');
+      btn.style.transform = 'scale(0.92)';
+      setTimeout(() => {
+        btn.style.transform = '';
+      }, 150);
+      console.log('Learn C++ curriculum mode toggled');
+    }
+
+    function renderStageList() {
+      const container = document.getElementById('stageList');
+      const clearedStages = JSON.parse(localStorage.getItem('shinobi_stars') || '{}');
+
+      container.innerHTML = stagesConfig.map(st => {
+        const has3Stars = clearedStages[st.id] === 3;
+        const starHTML = has3Stars ? '<div class="star-tag">⭐⭐⭐</div>' : '';
+
+        return `
+          <button class="lvl-btn ${st.isBonus ? 'bonus-btn' : ''} ${st.id === chosenLevel ? 'active' : ''}" onclick="selectLevel('${st.id}')">
+            <div class="stage-info">
+              <div>${st.name}</div>
+              <span>${st.pair}</span>
+            </div>
+            ${starHTML}
+          </button>
+        `;
+      }).join('');
+    }
+    renderStageList();
+
+    function selectLevel(lvl) {
+      chosenLevel = lvl;
+      renderStageList();
+    }
+
+    function startGame() {
+      if (!isPlaying) toggleAudio();
+
+      const panel = document.getElementById('leftPanel');
+      panel.classList.add('hidden');
+
+      if (window.ninjaInstance) {
+        window.ninjaInstance.startLevel(chosenLevel);
+      }
+    }
+
+    window.returnToHome = function() {
+      renderStageList();
+      const panel = document.getElementById('leftPanel');
+      panel.classList.remove('hidden');
+    };
+
+    const worldCanvas = document.getElementById('worldCanvas');
+    const ctx = worldCanvas.getContext('2d');
+    const bgMusic = document.getElementById('bgMusic');
+    const soundBtn = document.getElementById('soundBtn');
+    const soundLabel = document.getElementById('soundLabel');
+    const eqBars = document.getElementById('eqBars');
+
+    let isPlaying = false;
+    function toggleAudio() {
+      if (!isPlaying) {
+        bgMusic.play().then(() => {
+          isPlaying = true;
+          soundLabel.innerText = 'Sound On';
+          eqBars.classList.remove('eq-paused');
+          soundBtn.style.borderColor = '#00ffff';
+          soundBtn.style.color = '#00ffff';
+        }).catch(err => console.error('Audio play error:', err));
+      } else {
+        bgMusic.pause();
+        isPlaying = false;
+        soundLabel.innerText = 'Sound Off';
+        eqBars.classList.add('eq-paused');
+        soundBtn.style.borderColor = 'rgba(255, 100, 70, 0.4)';
+        soundBtn.style.color = '#ffaa5e';
+      }
+    }
+
+    const TILE_WIDTH = 1000;
+    const TILE_HEIGHT = 160;
+    const grassCanvas = document.createElement('canvas');
+    grassCanvas.width = TILE_WIDTH;
+    grassCanvas.height = TILE_HEIGHT;
+    const gCtx = grassCanvas.getContext('2d');
+
+    function buildGrassTile() {
+      gCtx.clearRect(0, 0, TILE_WIDTH, TILE_HEIGHT);
+      gCtx.fillStyle = '#050104';
+      gCtx.fillRect(0, 40, TILE_WIDTH, TILE_HEIGHT - 40);
+
+      gCtx.strokeStyle = '#050104';
+      gCtx.lineCap = 'round';
+
+      for (let i = 0; i < 350; i++) {
+        const gx = Math.random() * TILE_WIDTH;
+        const h = 6 + Math.random() * 11;
+        const curve = -3 - Math.random() * 7;
+        const w = 1.2 + Math.random() * 1.6;
+
+        gCtx.lineWidth = w;
+        gCtx.beginPath();
+        gCtx.moveTo(gx, 40);
+        gCtx.quadraticCurveTo(gx + curve * 0.4, 40 - h * 0.6, gx + curve, 40 - h);
+        gCtx.stroke();
+      }
+    }
+    buildGrassTile();
+
+    let bgDrawW = 0, bgDrawH = 0, bgDrawX = 0, bgDrawY = 0, actualGroundY = 0;
+    const bgImage = new Image();
+    bgImage.src = 'Background.png';
+
+    function resizeWorld() {
+      worldCanvas.width = window.innerWidth;
+      worldCanvas.height = window.innerHeight;
+
+      if (bgImage.complete && bgImage.naturalWidth > 0) {
+        const imgAspect = bgImage.naturalWidth / bgImage.naturalHeight;
+        const screenAspect = worldCanvas.width / worldCanvas.height;
+
+        if (screenAspect > imgAspect) {
+          bgDrawW = worldCanvas.width;
+          bgDrawH = worldCanvas.width / imgAspect;
+          bgDrawX = 0;
+          bgDrawY = (worldCanvas.height - bgDrawH) * 0.5;
+        } else {
+          bgDrawH = worldCanvas.height;
+          bgDrawW = worldCanvas.height * imgAspect;
+          bgDrawY = 0;
+          bgDrawX = (worldCanvas.width - bgDrawW) * 0.5;
+        }
+        actualGroundY = bgDrawY + bgDrawH * 0.665;
+      } else {
+        actualGroundY = worldCanvas.height * 0.665;
+      }
+
+      if (window.ninjaInstance) {
+        window.ninjaInstance.x = worldCanvas.width * 0.35;
+        window.ninjaInstance.y = actualGroundY;
+      }
+    }
+
+    bgImage.onload = resizeWorld;
+    window.addEventListener('resize', resizeWorld);
+    resizeWorld();
+
+    const MAX_DUST = 50;
+    const dustPool = new Float32Array(MAX_DUST * 6);
+    let dustHead = 0;
+
+    function spawnDust(x, y) {
+      const idx = dustHead * 6;
+      dustPool[idx] = x - 15;
+      dustPool[idx + 1] = y - 2;
+      dustPool[idx + 2] = -(5.0 + Math.random() * 6.0);
+      dustPool[idx + 3] = -(1.2 + Math.random() * 2.5);
+      dustPool[idx + 4] = 2.2 + Math.random() * 3.2;
+      dustPool[idx + 5] = 0.45;
+      dustHead = (dustHead + 1) % MAX_DUST;
+    }
+
+    const MAX_FLAMES = 75;
+    const flamePool = new Float32Array(MAX_FLAMES * 8);
+    let flameHead = 0;
+
+    function spawnFlame(originX, originY) {
+      for (let i = 0; i < 4; i++) {
+        const ratio = Math.random();
+        const idx = flameHead * 8;
+        flamePool[idx] = originX + (ratio * 26) + (Math.random() - 0.5) * 16;
+        flamePool[idx + 1] = originY - 14 - (ratio * 40);
+        flamePool[idx + 2] = -(2.8 + Math.random() * 4.2);
+        flamePool[idx + 3] = -(3.8 + Math.random() * 5.8);
+        flamePool[idx + 4] = 8.0 + Math.random() * 11.0;
+        flamePool[idx + 5] = 20.0 + Math.random() * 26.0;
+        flamePool[idx + 6] = 0.88;
+        flamePool[idx + 7] = (Math.random() - 0.5) * 4.5;
+        flameHead = (flameHead + 1) % MAX_FLAMES;
+      }
+    }
+
+    const MAX_EMBERS = 50;
+    const embersPool = [];
+    for (let i = 0; i < MAX_EMBERS; i++) {
+      embersPool.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        size: 1 + Math.random() * 2.2,
+        vx: -4.0 - Math.random() * 4.0,
+        vy: -0.2 - Math.random() * 0.4,
+        baseAlpha: 0.3 + Math.random() * 0.55
+      });
+    }
+
+    function renderFlames() {
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < MAX_FLAMES; i++) {
+        const idx = i * 8;
+        let alpha = flamePool[idx + 6];
+        if (alpha <= 0.01) continue;
+
+        flamePool[idx] += flamePool[idx + 2];
+        flamePool[idx + 1] += flamePool[idx + 3];
+        flamePool[idx + 4] *= 0.93;
+        flamePool[idx + 5] *= 0.93;
+        flamePool[idx + 6] -= 0.048;
+
+        const x = flamePool[idx];
+        const y = flamePool[idx + 1];
+        const w = flamePool[idx + 4];
+        const h = flamePool[idx + 5];
+        const flk = flamePool[idx + 7];
+
+        ctx.fillStyle = `rgba(0, 240, 255, ${alpha * 0.8})`;
+        ctx.beginPath();
+        ctx.moveTo(x, y + h * 0.5);
+        ctx.quadraticCurveTo(x + w * 0.8 + flk, y, x, y - h * 0.6);
+        ctx.quadraticCurveTo(x - w * 0.8 + flk, y, x, y + h * 0.5);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.95})`;
+        ctx.beginPath();
+        ctx.moveTo(x, y + h * 0.25);
+        ctx.quadraticCurveTo(x + w * 0.3, y, x, y - h * 0.3);
+        ctx.quadraticCurveTo(-w * 0.3 + x, y, x, y + h * 0.25);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    function renderDust() {
+      for (let i = 0; i < MAX_DUST; i++) {
+        const idx = i * 6;
+        let alpha = dustPool[idx + 5];
+        if (alpha <= 0.01) continue;
+
+        dustPool[idx] += dustPool[idx + 2];
+        dustPool[idx + 1] += dustPool[idx + 3];
+        dustPool[idx + 4] *= 0.95;
+        dustPool[idx + 5] -= 0.03;
+
+        ctx.fillStyle = `rgba(180, 90, 60, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(dustPool[idx], dustPool[idx + 1], dustPool[idx + 4], 0, 6.283);
+        ctx.fill();
+      }
+    }
+
+    function renderEmbers(timeMs) {
+      ctx.shadowColor = '#ff8f3d';
+      ctx.shadowBlur = 6;
+      for (let i = 0; i < MAX_EMBERS; i++) {
+        const e = embersPool[i];
+        e.x += e.vx;
+        e.y += e.vy;
+
+        if (e.x < 0) e.x = worldCanvas.width;
+        if (e.x > worldCanvas.width) e.x = 0;
+        if (e.y < 0) e.y = worldCanvas.height;
+        if (e.y > worldCanvas.height) e.y = 0;
+
+        const pulse = 0.6 + 0.4 * Math.sin(timeMs * 0.004 + i);
+        ctx.fillStyle = `rgba(255, 175, 70, ${e.baseAlpha * pulse})`;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.size, 0, 6.283);
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    let worldX = 0;
+    let cameraX = 0;
+    const RUN_SPEED = 26;
+
+    let cooldownTimer = 0;
+
+    window.resetWorldTimer = function() {
+      cooldownTimer = 0;
+    };
+
+    function update(now) {
+      const isGameOver = window.ninjaInstance && window.ninjaInstance.isGameOver;
+      const isGameWon = window.ninjaInstance && window.ninjaInstance.isGameWon;
+      const isGameStarted = window.ninjaInstance && window.ninjaInstance.isGameStarted;
+
+      worldX += RUN_SPEED;
+      cameraX += (worldX - cameraX) * 0.15;
+
+      if (isGameStarted && !isGameOver && !isGameWon) {
+        const inst = window.ninjaInstance;
+        const subLvl = inst.subLevel;
+
+        let spawnDelay = 100;
+        let maxEnemiesInFrame = 1;
+
+        if (subLvl === 1) {
+          spawnDelay = 95;
+          maxEnemiesInFrame = 1;
+        } else if (subLvl === 2) {
+          spawnDelay = 60;
+          maxEnemiesInFrame = 1;
+        } else if (subLvl === 3) {
+          spawnDelay = 38;
+          maxEnemiesInFrame = 2;
+        }
+
+        if (inst.enemies.length < maxEnemiesInFrame) {
+          cooldownTimer++;
+          if (cooldownTimer >= spawnDelay) {
+            inst.spawnOneEnemy();
+            cooldownTimer = 0;
+          }
+        }
+      }
+
+      ctx.fillStyle = '#030002';
+      ctx.fillRect(0, 0, worldCanvas.width, worldCanvas.height);
+
+      if (bgDrawW > 0) {
+        ctx.drawImage(bgImage, bgDrawX, bgDrawY, bgDrawW, bgDrawH);
+      }
+
+      const grassGroundY = actualGroundY - 40;
+      const offsetX = -(cameraX % TILE_WIDTH);
+      let curX = offsetX;
+      while (curX < worldCanvas.width) {
+        ctx.drawImage(grassCanvas, curX, grassGroundY);
+        curX += TILE_WIDTH;
+      }
+      ctx.fillStyle = '#050104';
+      ctx.fillRect(0, actualGroundY + (TILE_HEIGHT - 40), worldCanvas.width, worldCanvas.height);
+
+      const screenPlayerX = (worldX - cameraX) + (worldCanvas.width * 0.35);
+
+      if (window.ninjaInstance) {
+        window.ninjaInstance.x = screenPlayerX;
+        window.ninjaInstance.y = actualGroundY;
+      }
+
+      spawnFlame(screenPlayerX, actualGroundY);
+      spawnDust(screenPlayerX, actualGroundY);
+
+      renderFlames();
+      renderDust();
+      renderEmbers(now);
+
+      requestAnimationFrame(update);
+    }
+
+    requestAnimationFrame(update);
+  </script>
+</body>
+</html>

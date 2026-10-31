@@ -1,0 +1,4081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shinobi Striker</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    :root {
+      --bg-metal: #0b0e14;
+      --panel-surface: rgba(16, 20, 28, 0.92);
+      --card-surface: rgba(22, 27, 38, 0.88);
+      --border-steel: rgba(148, 163, 184, 0.22);
+      --border-highlight: rgba(56, 189, 248, 0.45);
+      --accent-cyan: #00f0ff;
+      --accent-gold: #f59e0b;
+      --accent-crimson: #ef4444;
+      --accent-emerald: #10b981;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+    }
+
+    body {
+      background-color: #06080c;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text-primary);
+    }
+
+    /* ==========================================================================
+       SPLIT-SCREEN MASTER LAYOUT (50% 3D VIEWPORT / 50% COMMAND & LEARNING DECK)
+       ========================================================================== */
+    #app-split-layout {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* LEFT HALF: 100% UNOBSTRUCTED 3D VIEWPORT */
+    #viewport-pane {
+      position: relative;
+      width: 50%;
+      height: 100%;
+      background: #04060a;
+      border-right: 2px solid rgba(148, 163, 184, 0.25);
+      box-shadow: inset -12px 0 30px rgba(0, 0, 0, 0.75);
+      overflow: hidden;
+    }
+
+    #webgl-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      cursor: grab;
+    }
+    #webgl-container:active {
+      cursor: grabbing;
+    }
+
+    /* Minimal Floating Viewport Controls (Top Left & Right of 3D View) */
+    .viewport-top-bar {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      z-index: 15;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    .viewport-badge {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(180deg, rgba(24, 30, 42, 0.9), rgba(12, 16, 24, 0.92));
+      border: 1px solid var(--border-steel);
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #e2e8f0;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-emerald);
+      box-shadow: 0 0 8px var(--accent-emerald);
+    }
+
+    .viewport-controls {
+      pointer-events: auto;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .top-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: linear-gradient(180deg, rgba(30, 38, 52, 0.92), rgba(15, 20, 29, 0.95));
+      border: 1px solid rgba(148, 163, 184, 0.32);
+      color: #f8fafc;
+      padding: 8px 14px;
+      border-radius: 9px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      transition: all 0.18s ease;
+      outline: none;
+    }
+    .top-btn:hover {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(0, 240, 255, 0.2);
+    }
+
+    .eq-wave {
+      display: flex;
+      align-items: center;
+      gap: 2.5px;
+      height: 11px;
+    }
+    .eq-bar {
+      width: 2.5px;
+      height: 100%;
+      background: var(--accent-cyan);
+      border-radius: 2px;
+      animation: eqBounce 0.8s ease-in-out infinite alternate;
+    }
+    .eq-bar:nth-child(2) { animation-delay: 0.2s; height: 60%; }
+    .eq-bar:nth-child(3) { animation-delay: 0.4s; height: 80%; }
+    .eq-paused .eq-bar {
+      animation: none !important;
+      height: 28% !important;
+      background: rgba(148, 163, 184, 0.45) !important;
+    }
+    @keyframes eqBounce {
+      0% { height: 25%; }
+      100% { height: 100%; }
+    }
+
+    /* ==========================================================================
+       RIGHT HALF: REALISTIC TACTICAL INFO, LEARNING & ANSWERING CONSOLE
+       ========================================================================== */
+    #info-pane {
+      width: 50%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background:
+        radial-gradient(circle at 90% 10%, rgba(14, 116, 144, 0.14), transparent 45%),
+        radial-gradient(circle at 10% 90%, rgba(180, 83, 9, 0.1), transparent 45%),
+        linear-gradient(180deg, #0d1118 0%, #090c12 100%);
+      padding: 16px 20px;
+      gap: 12px;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    #info-pane::-webkit-scrollbar { width: 6px; }
+    #info-pane::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.25); }
+    #info-pane::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 3px; }
+
+    /* TOP TELEMETRY & HUD BAR */
+    #hudOverlay {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: linear-gradient(180deg, rgba(25, 31, 44, 0.92) 0%, rgba(16, 20, 29, 0.95) 100%);
+      border: 1px solid var(--border-steel);
+      border-radius: 12px;
+      padding: 12px 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      flex-shrink: 0;
+    }
+
+    .hud-top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .vitality-card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .hud-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      color: #94a3b8;
+      text-transform: uppercase;
+    }
+
+    .vitality-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .hearts-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .orb-heart {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #a5f3fc, #00d8ff 60%, #0284c7 100%);
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      transition: all 0.3s ease;
+    }
+    .orb-heart.lost {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1.5px solid #ef4444;
+      box-shadow: none;
+    }
+
+    .stats-row {
+      display: flex;
+      gap: 8px;
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+    .stat-pill {
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: rgba(9, 12, 18, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      font-family: "JetBrains Mono", monospace;
+    }
+
+    .progress-card {
+      flex: 1;
+      min-width: 200px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .progress-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .progress-title {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: #e2e8f0;
+      letter-spacing: 0.8px;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      background: rgba(9, 12, 18, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #0284c7, #00f0ff, #f59e0b);
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.45);
+      transition: width 0.35s ease;
+    }
+
+    /* ==========================================================================
+       ACTIVE MISSION MODULES STACK (MUTUALLY EXCLUSIVE FULL-SPACE CARDS)
+       ========================================================================== */
+    #missionModulesWrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .module-card {
+      background: linear-gradient(180deg, rgba(22, 28, 40, 0.92) 0%, rgba(14, 18, 26, 0.96) 100%);
+      border: 1px solid var(--border-steel);
+      border-radius: 12px;
+      padding: 20px 22px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 14px;
+      flex: 1;
+      min-height: 0;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
+    }
+
+    .module-card.active-focus {
+      border-color: rgba(0, 240, 255, 0.55);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(0, 240, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+
+    .module-card.combat-focus {
+      border-color: rgba(245, 158, 11, 0.65);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65), 0 0 24px rgba(245, 158, 11, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+
+    .module-card.standby-mode {
+      opacity: 0.72;
+    }
+
+    .module-tag-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+      padding-bottom: 8px;
+    }
+
+    .module-type-label {
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* 1. LEARNING MODULE (#wisdomBanner) */
+    .wb-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .wb-badge {
+      background: rgba(2, 132, 199, 0.2);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      color: #38bdf8;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 9px;
+      border-radius: 5px;
+      letter-spacing: 0.8px;
+    }
+    .wb-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #f8fafc;
+      letter-spacing: 0.4px;
+      flex: 1;
+    }
+
+    .wb-code {
+      background: #070a0f;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-left: 3px solid #38bdf8;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-family: "JetBrains Mono", Consolas, monospace;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #7dd3fc;
+      white-space: pre-wrap;
+      line-height: 1.45;
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+    }
+
+    .wb-desc {
+      font-size: 12.5px;
+      color: #cbd5e1;
+      line-height: 1.5;
+    }
+    .wb-desc strong {
+      color: #fbbf24;
+    }
+
+    .wb-footer {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 2px;
+    }
+    .wb-timer-track {
+      width: 100%;
+      height: 5px;
+      background: rgba(15, 23, 42, 0.9);
+      border-radius: 3px;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+    }
+    .wb-timer-fill {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #38bdf8, #00f0ff);
+      transition: width 0.1s linear;
+    }
+    .wb-footer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .strike-now-btn {
+      background: linear-gradient(180deg, #0284c7, #0369a1);
+      color: #ffffff;
+      border: 1px solid rgba(125, 211, 252, 0.45);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      transition: all 0.18s ease;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
+    }
+    .strike-now-btn:hover {
+      background: linear-gradient(180deg, #0ea5e9, #0284c7);
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.55);
+      transform: translateY(-1px);
+    }
+
+    /* 2. ANSWERING MODULE (#quizOverlay) */
+    #quizOverlay {
+      flex: 1;
+      justify-content: space-between;
+    }
+
+    .question-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .q-topic {
+      color: #fbbf24;
+      font-size: 11.5px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .timer-badge {
+      background: rgba(239, 68, 68, 0.16);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #fca5a5;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 3px 11px;
+      border-radius: 6px;
+      font-family: "JetBrains Mono", monospace;
+    }
+
+    .q-text {
+      color: #f8fafc;
+      font-size: 14.5px;
+      font-weight: 700;
+      line-height: 1.45;
+      background: rgba(9, 13, 20, 0.65);
+      padding: 10px 13px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .answer-input {
+      flex: 1;
+      background: #06090e;
+      border: 1.5px solid rgba(148, 163, 184, 0.32);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #38bdf8;
+      font-size: 15px;
+      font-weight: 700;
+      outline: none;
+      font-family: "JetBrains Mono", monospace;
+      user-select: text !important;
+      transition: all 0.2s ease;
+    }
+
+    .answer-input:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 14px rgba(0, 240, 255, 0.25);
+    }
+
+    .answer-input:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .submit-btn {
+      background: linear-gradient(180deg, #f59e0b, #d97706);
+      border: 1px solid rgba(253, 230, 138, 0.45);
+      color: #090c10;
+      font-size: 12.5px;
+      font-weight: 900;
+      padding: 0 22px;
+      border-radius: 8px;
+      cursor: pointer;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      transition: all 0.18s ease;
+      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+    }
+
+    .submit-btn:hover:not(:disabled) {
+      background: linear-gradient(180deg, #fbbf24, #f59e0b);
+      box-shadow: 0 0 18px rgba(251, 191, 36, 0.6);
+      transform: translateY(-1px);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .hints-box {
+      background: rgba(9, 12, 18, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 9px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .hints-header {
+      font-size: 10.5px;
+      font-weight: 800;
+      color: #94a3b8;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    #hintsList {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .hint-step {
+      font-size: 12px;
+      color: #94a3b8;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.025);
+      border-radius: 6px;
+      border-left: 3px solid rgba(148, 163, 184, 0.25);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .hint-step.unlocked {
+      color: #e2e8f0;
+      border-left-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.07);
+    }
+
+    .hint-step.final-hint {
+      color: #fcd34d;
+      border-left-color: #f59e0b;
+      background: rgba(245, 158, 11, 0.1);
+      font-weight: 700;
+    }
+
+    .reveal-hint-btn {
+      background: rgba(56, 189, 248, 0.14);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      color: #7dd3fc;
+      padding: 3px 9px;
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 800;
+      cursor: pointer;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+    .reveal-hint-btn:hover {
+      background: #38bdf8;
+      color: #06090e;
+    }
+
+    /* ==========================================================================
+       STAGE SELECTOR DRAWER / MODAL INSIDE THE RIGHT PANE (#leftPanel)
+       ========================================================================== */
+    #leftPanel {
+      background: linear-gradient(180deg, rgba(20, 25, 36, 0.98) 0%, rgba(11, 14, 21, 0.99) 100%);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      padding: 18px;
+      border-radius: 12px;
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.75);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    #leftPanel.hidden {
+      display: none;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+      padding-bottom: 10px;
+    }
+
+    .panel-title-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 3px;
+    }
+
+    .panel-title {
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 1.2px;
+      color: #f8fafc;
+      text-transform: uppercase;
+    }
+
+    .panel-subtitle {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.6px;
+      color: #94a3b8;
+    }
+
+    .level-selector {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 10px;
+      overflow-y: auto;
+      padding-right: 4px;
+      flex: 1;
+    }
+    .level-selector::-webkit-scrollbar { width: 5px; }
+    .level-selector::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.03); }
+    .level-selector::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 4px; }
+
+    .stage-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: rgba(11, 15, 23, 0.75);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .stage-header-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: #38bdf8;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      padding: 2px 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .stage-levels-col {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .lvl-btn-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      width: 100%;
+    }
+
+    .lvl-btn {
+      flex: 1;
+      background: rgba(22, 28, 40, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      color: #e2e8f0;
+      padding: 8px 11px;
+      border-radius: 8px;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.18s ease;
+      outline: none;
+    }
+
+    .lvl-btn .stage-info {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1px;
+    }
+
+    .lvl-btn .star-tag {
+      color: #fbbf24;
+      font-size: 10.5px;
+      font-weight: 800;
+    }
+
+    .lvl-btn span {
+      font-size: 10px;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+
+    .lvl-btn:hover:not(.locked) {
+      border-color: #38bdf8;
+      background: rgba(56, 189, 248, 0.08);
+    }
+
+    .lvl-btn.active {
+      background: rgba(2, 132, 199, 0.24);
+      border-color: #38bdf8;
+      color: #ffffff;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+    }
+    .lvl-btn.active span { color: #bae6fd; }
+
+    .lvl-btn.locked {
+      opacity: 0.42;
+      cursor: not-allowed;
+      background: rgba(9, 12, 18, 0.6);
+    }
+    .lvl-btn.locked .star-tag {
+      color: #f87171;
+    }
+
+    .reattempt-btn {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: rgba(245, 158, 11, 0.14);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 900;
+      transition: all 0.18s ease;
+    }
+    .reattempt-btn:hover {
+      background: #f59e0b;
+      color: #090c10;
+    }
+
+    .lvl-link-btn {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 5px;
+      background: rgba(56, 189, 248, 0.14);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      color: #38bdf8;
+      padding: 5px 12px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.6px;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: all 0.18s ease;
+    }
+    .lvl-link-btn:hover {
+      background: #38bdf8;
+      color: #06090e;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.45);
+      transform: translateY(-1px);
+    }
+
+    #playBtn {
+      background: linear-gradient(180deg, #0ea5e9, #0284c7);
+      color: #ffffff;
+      border: 1px solid rgba(186, 230, 253, 0.4);
+      padding: 12px 20px;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.45);
+      transition: all 0.2s ease;
+      flex-shrink: 0;
+    }
+    #playBtn:hover {
+      background: linear-gradient(180deg, #38bdf8, #0ea5e9);
+      transform: translateY(-1px);
+    }
+
+    /* END SCREEN MODAL (CONTAINED CLEANLY IN RIGHT PANE) */
+    #endModal {
+      position: absolute;
+      inset: 16px;
+      z-index: 60;
+      background: rgba(9, 13, 20, 0.94);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 14px;
+      backdrop-filter: blur(14px);
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 14px;
+      text-align: center;
+      padding: 24px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85);
+    }
+    #endModal.active {
+      display: flex;
+    }
+    .end-title {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 2px;
+    }
+    .end-sub {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fbbf24;
+    }
+    .end-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    /* Outer Link Button Container */
+    .lvl-link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background-color: rgba(15, 23, 30, 0.7); /* Dark semi-transparent surface */
+      border: 2px solid #00f0ff;
+      border-radius: 20px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      
+      /* Cyan Neon Outer Glow */
+      box-shadow: 0 0 10px #00f0ff, inset 0 0 5px rgba(0, 240, 255, 0.3);
+    }
+
+    .lvl-link-btn:hover {
+      box-shadow: 0 0 20px #00f0ff, inset 0 0 10px rgba(0, 240, 255, 0.6);
+      transform: translateY(-1px);
+    }
+
+    /* Icon Box inside the Button */
+    .btn-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 32px;
+      background-color: #00f0ff;
+      border-radius: 10px;
+      color: #000;
+      font-weight: bold;
+      font-family: monospace;
+      font-size: 14px;
+    }
+
+    /* Text Container */
+    .btn-label {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      line-height: 1.2;
+    }
+
+    /* Sub-Text / Category Header */
+    .sub-txt {
+      font-size: 11px;
+      font-weight: 700;
+      color: #ff9d42; /* Orange accent */
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border-bottom: 1px solid #ff9d42;
+      padding-bottom: 1px;
+    }
+
+    /* Main Action Text */
+    .main-txt {
+      font-size: 16px;
+      font-weight: 600;
+      color: #ffffff;
+      letter-spacing: 0.5px;
+      text-underline-offset: 3px;
+    }
+
+    /* Responsive support for narrow/vertical screens */
+    @media (max-width: 960px) {
+      #app-split-layout {
+        flex-direction: column;
+      }
+      #viewport-pane {
+        width: 100%;
+        height: 44%;
+        border-right: none;
+        border-bottom: 2px solid rgba(148, 163, 184, 0.25);
+      }
+      #info-pane {
+        width: 100%;
+        height: 56%;
+      }
+    }
+  </style>
+
+  <!-- Three.js WebGL Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <audio id="bgMusic" src="bgm.mp3" loop preload="auto"></audio>
+
+  <div id="app-split-layout">
+
+    <!-- ======================================================================
+         LEFT HALF: UNOBSTRUCTED 3D REALISTIC ARENA & STICKMAN VIEWPORT
+         ====================================================================== -->
+    <div id="viewport-pane">
+      <div class="viewport-top-bar">
+        <div class="viewport-badge">
+          <div class="status-dot"></div>
+          <span id="arenaPhaseTag">3D ARENA • FREE ORBIT</span>
+        </div>
+
+        <div class="viewport-controls">
+          <button class="top-btn" onclick="cycleCameraMode()" title="Switch 3D Camera Perspective [C]">
+            <span>🎥 <span id="camLabel">3D CHASE</span></span>
+          </button>
+          <button class="top-btn" id="soundBtn" onclick="toggleAudio()">
+            <div class="eq-wave eq-paused" id="eqBars">
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+              <div class="eq-bar"></div>
+            </div>
+            <span id="soundLabel">Audio Off</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="webgl-container"></div>
+    </div>
+
+    <!-- ======================================================================
+         RIGHT HALF: DEDICATED INFO, LEARNING MODULE & ANSWERING MODULE CONSOLE
+         ====================================================================== -->
+    <div id="info-pane">
+
+      <!-- TOP TELEMETRY & HUD -->
+      <div id="hudOverlay">
+        <div class="hud-top-bar">
+          <div class="vitality-card">
+            <div class="hud-label">Shinobi Vitality & Telemetry</div>
+            <div class="vitality-row">
+              <div class="hearts-row" id="heartsContainer">
+                <div class="orb-heart"></div>
+                <div class="orb-heart"></div>
+                <div class="orb-heart"></div>
+              </div>
+              <div class="stats-row">
+                <div class="stat-pill" style="color:#38bdf8;">⚡ <span id="hudCombo">x1</span></div>
+                <div class="stat-pill" style="color:#fbbf24;">🛡️ <span id="hudShield">0/5</span></div>
+                <div class="stat-pill" style="color:#34d399;">🏆 <span id="hudScore">0</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="progress-card">
+            <div class="progress-header-row">
+              <div class="progress-title" id="hudTopicTitle">STAGE 1.1: VARIABLES & DATA TYPES</div>
+              <div class="hud-label" id="hudTargetCount">0 / 10 TARGETS</div>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="hudProgressFill"></div>
+            </div>
+          </div>
+
+          <button class="top-btn" onclick="toggleStageDrawer()" id="stageMenuToggleBtn">
+            <span>🗺️ STAGES</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- STAGE SELECTOR PANEL (TOGGLEABLE IN RIGHT PANE) -->
+      <div id="leftPanel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title-row">
+              <div class="panel-title">Shinobi Striker</div>
+              <a href="https://shinobi-striker.vercel.app" id="headerLinkBtn" href="https://shinobi-striker.vercel.app" rel="noopener noreferrer" class="lvl-link-btn" title="Open Mission Study Link">
+                <!-- Icon Container -->
+                <div class="btn-icon">
+                  <span>&lt;/&gt;</span>
+                </div>
+
+                <!-- Text Labels Container -->
+                <div class="btn-label">
+                  <span class="main-txt">Improve Typing</span>
+                </div>
+              </a>
+            </div>
+            <div class="panel-subtitle">C++ Combat Game • 160 Interactive Drills • Unobstructed Split-Screen Arena</div>
+          </div>
+        </div>
+
+        <div class="level-selector" id="stageList"></div>
+
+        <button id="playBtn" onclick="startGame()">START LEARNING</button>
+      </div>
+
+      <!-- MUTUALLY EXCLUSIVE LEARNING MODULE OR ANSWERING MODULE -->
+      <div id="missionModulesWrapper" style="display: none;">
+
+        <!-- MODULE 1: C++ LEARNING & BRIEFING MODULE (SHOWN DURING LEARNING, HIDDEN DURING CLASH) -->
+        <div id="wisdomBanner" class="module-card active-focus">
+          <div class="module-tag-row">
+            <span class="module-type-label">📘 MODULE 01 // C++ TACTICAL LEARNING BRIEFING</span>
+            <span class="wb-badge" id="wbCounter">CONCEPT 1 OF 10</span>
+          </div>
+          <div class="wb-header">
+            <span class="wb-title" id="wbTitle">Whole Number Representations</span>
+          </div>
+          <div class="wb-code" id="wbCode">// Type keyword followed by identifier and value</div>
+          <div class="wb-desc"><strong>CONCEPT ANALYSIS:</strong> <span id="wbDesc">Description</span></div>
+          <div class="wb-footer">
+            <div class="wb-timer-track">
+              <div class="wb-timer-fill" id="wbTimerFill"></div>
+            </div>
+            <div class="wb-footer-row">
+              <span style="color:#fbbf24;" id="wbTimeText">PARKOUR STUDY WINDOW: 45s</span>
+              <button class="strike-now-btn" id="summonEnemyBtn" onclick="triggerImmediateCombat()">⚔️ ENGAGE ENEMY NOW [SPACE]</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODULE 2: KATANA CLASH ANSWERING & INTEL MODULE (HIDDEN DURING LEARNING, SHOWN DURING CLASH) -->
+        <div id="quizOverlay" class="module-card combat-focus" style="display: none;">
+          <div class="module-tag-row">
+            <span class="module-type-label">⚔️ MODULE 02 // KATANA CLASH ANSWERING TERMINAL</span>
+            <span class="timer-badge" id="quizTimer">30s</span>
+          </div>
+
+          <div class="question-header">
+            <span class="q-topic" id="quizTopic">AWAITING ENEMY INTERCEPT...</span>
+          </div>
+
+          <div class="q-text" id="quizQuestion">
+            Loading question...
+          </div>
+
+          <div class="input-row">
+            <input type="text" id="answerInput" class="answer-input" placeholder="Type C++ syntax answer and press Enter..." autocomplete="off" spellcheck="false" />
+            <button class="submit-btn" id="submitBtn" onclick="submitAnswer()">STRIKE</button>
+          </div>
+
+          <div class="hints-box">
+            <div class="hints-header">
+              <span>Tactical Intel Decryptor (Auto-unlocks every 10s or click reveal)</span>
+              <span id="hintCountdown">Next in 10s</span>
+            </div>
+            <div id="hintsList"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- WIN / LOSS MODAL -->
+      <div id="endModal">
+        <div class="end-title" id="endTitle">MISSION COMPLETE</div>
+        <div class="end-sub" id="endSub">TARGETS DEFEATED: 10 / 10</div>
+        <div class="end-actions">
+          <button class="submit-btn" style="padding:12px 24px;" onclick="retryCurrentLevel()">↻ REPLAY LEVEL [R]</button>
+          <button class="top-btn" style="padding:12px 24px;" onclick="returnToMenu()">🗺️ STAGE SELECTOR</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ============================================================================
+    // 1. COMPLETE C++ CURRICULUM DATABASE (16 LEVELS, 160 DRILLS)
+    // ============================================================================
+    const STAGE_QUESTIONS = {
+      '1_1': {
+        topic: 'Variables & Data Types',
+        drills: [
+          {
+            conceptTitle: 'Whole Number Representations',
+            conceptSyntax: '// Type keyword followed by identifier and value\n_____ score = 100;\n_____ delta = -25;',
+            conceptDesc: 'Whole numbers without any fractional or decimal parts represent discrete quantities. In C++, they occupy 4 bytes in standard 32/64-bit systems.',
+            q: 'What fundamental 3-letter keyword declares whole signed integer variables?',
+            ans: 'int',
+            hints: ['Short for integer.', 'Occupies 4 bytes of memory.', '3 letters starting with i.']
+          },
+          {
+            conceptTitle: 'Single Character Storage',
+            conceptSyntax: '_____ grade = \'A\';\n_____ delimiter = \'#\';',
+            conceptDesc: 'Individual text symbols and ASCII values are enclosed inside single quotation marks. They occupy exactly 1 byte in physical memory.',
+            q: 'What keyword declares single-character variables enclosed in single quotes?',
+            ans: 'char',
+            hints: ['Short for character.', 'Occupies 1 byte.', '4 letters starting with c.']
+          },
+          {
+            conceptTitle: 'Double-Precision Numbers',
+            conceptSyntax: '_____ ratio = 99.45821;\n_____ coordinate = 3.1415926535;',
+            conceptDesc: 'Real numbers with fractional decimal points require floating-point representations. This 64-bit type offers precision up to ~15 decimal digits.',
+            q: 'What keyword represents double-precision 64-bit floating point numbers?',
+            ans: 'double',
+            hints: ['Offers double the precision of a float.', 'Occupies 8 bytes of memory.', '6 letters starting with d.']
+          },
+          {
+            conceptTitle: 'Binary Truth States',
+            conceptSyntax: '_____ isAwake = true;\n_____ hasShield = false;',
+            conceptDesc: 'Logical conditions require binary evaluations that can only be affirmative or negative. This type stores strictly true or false.',
+            q: 'What 4-letter type stores strictly true or false boolean values?',
+            ans: 'bool',
+            hints: ['Named after mathematician George Boole.', 'Values can only be true or false.', '4 letters starting with b.']
+          },
+          {
+            conceptTitle: 'Locking Variable Mutability',
+            conceptSyntax: '_____ int MAX_CAPACITY = 1000;\n// Attempting to reassign will cause compile error!',
+            conceptDesc: 'Qualifying an identifier with this keyword prevents any accidental modifications or reassignments after initial assignment.',
+            q: 'What keyword modifier locks a variable value so it cannot be modified?',
+            ans: 'const',
+            hints: ['Short for constant.', 'Enforces read-only immutability.', '5 letters starting with c.']
+          },
+          {
+            conceptTitle: 'Standard Floating Decimals',
+            conceptSyntax: '_____ factor = 3.14f;\n_____ scale = 0.5f;',
+            conceptDesc: 'For graphics and embedded applications where memory is constrained, this 32-bit floating type is used. Literals often append the letter f.',
+            q: 'What 5-letter type represents 32-bit single-precision floating decimals?',
+            ans: 'float',
+            hints: ['Literals end with f (e.g. 2.5f).', 'Occupies 4 bytes.', '5 letters starting with f.']
+          },
+          {
+            conceptTitle: 'Non-Negative Integer Ranges',
+            conceptSyntax: '_____ int totalCredits = 50000;\n// Negative assignments wrap around or fail',
+            conceptDesc: 'By disallowing negative numbers entirely, the positive range of an integer doubles to roughly 4.29 billion on 32-bit systems.',
+            q: 'What keyword modifier prevents an integer variable from holding negative values?',
+            ans: 'unsigned',
+            hints: ['Allows only zero and positive values.', 'Prefix modifier for int and char.', '8 letters starting with u.']
+          },
+          {
+            conceptTitle: 'Evaluating Physical Storage Size',
+            conceptSyntax: 'size_t bytes = _____(double);\n// Returns the byte size at compile-time',
+            conceptDesc: 'Different hardware architectures allocate differing byte widths. This compile-time operator evaluates the exact byte footprint of any type.',
+            q: 'What operator queries and returns the byte size of any data type in C++?',
+            ans: 'sizeof',
+            hints: ['Evaluated at compile-time.', 'Syntax is operator(type).', '6 letters starting with s.']
+          },
+          {
+            conceptTitle: 'Automatic Type Deduction',
+            conceptSyntax: '_____ velocity = 45.8;  // deduced automatically\n_____ tier = \'S\';        // deduced automatically',
+            conceptDesc: 'Introduced in C++11, this keyword instructs the compiler to infer the appropriate variable type directly from its initialization expression.',
+            q: 'What keyword instructs the compiler to automatically deduce a variable type?',
+            ans: 'auto',
+            hints: ['Introduced in C++11.', 'Commonly used with complex iterator types.', '4 letters starting with a.']
+          },
+          {
+            conceptTitle: 'Functions Returning No Value',
+            conceptSyntax: '_____ logStatusMessage() {\n  std::cout << "System Online";\n}',
+            conceptDesc: 'When a function performs an operational task without returning an output value or calculation back to the caller, this return type is used.',
+            q: 'What keyword represents an empty return type for functions that return no value?',
+            ans: 'void',
+            hints: ['Signifies absence of type or data.', 'Common return type for procedures.', '4 letters starting with v.']
+          }
+        ]
+      },
+      '1_2': {
+        topic: 'Operators & Conditions',
+        drills: [
+          {
+            conceptTitle: 'Testing Value Equality',
+            conceptSyntax: 'if (playerScore _____ winningTarget) {\n  claimVictory();\n}',
+            conceptDesc: 'Assignment uses a single equals sign. To test whether two values are mathematically identical, a relational comparison operator is required.',
+            q: 'What operator tests if two expressions are equal in value?',
+            ans: '==',
+            hints: ['Not to be confused with single assignment (=).', 'Two consecutive equals signs.', '2 characters: ==']
+          },
+          {
+            conceptTitle: 'Testing Value Inequality',
+            conceptSyntax: 'if (incomingKey _____ \'Q\') {\n  keepRunning();\n}',
+            conceptDesc: 'When branching needs to trigger only when two expressions do not match, the relational inequality operator evaluates to true.',
+            q: 'What operator tests if two operands are NOT equal to each other?',
+            ans: '!=',
+            hints: ['Exclamation mark paired with an equals sign.', 'Evaluates opposite of ==.', '2 characters: !=']
+          },
+          {
+            conceptTitle: 'Conjunctive Logical Conditions',
+            conceptSyntax: 'if (hasKey _____ doorUnlocked) {\n  enterVault();\n}',
+            conceptDesc: 'When multiple prerequisite criteria must simultaneously be satisfied, this logical operator returns true only if BOTH operands are true.',
+            q: 'What logical operator evaluates to true ONLY if both conditions are true?',
+            ans: '&&',
+            hints: ['Represents logical AND.', 'Two consecutive ampersand symbols.', '2 characters: &&']
+          },
+          {
+            conceptTitle: 'Disjunctive Logical Conditions',
+            conceptSyntax: 'if (isVipMember _____ hasDiscountCoupon) {\n  applySpecialRate();\n}',
+            conceptDesc: 'When satisfying either of two alternative conditions is sufficient, this logical operator returns true if AT LEAST ONE side evaluates to true.',
+            q: 'What operator evaluates to true if either condition is true?',
+            ans: '||',
+            hints: ['Represents logical OR.', 'Two vertical pipe characters.', '2 characters: ||']
+          },
+          {
+            conceptTitle: 'Logical Inversion',
+            conceptSyntax: 'if (_____isExhausted) {\n  continueSprinting();\n}',
+            conceptDesc: 'To flip the truth value of a condition without writing an explicit equality check, the unary negation operator reverses true and false.',
+            q: 'What unary operator inverts a boolean from true to false or vice versa?',
+            ans: '!',
+            hints: ['Represents logical NOT.', 'A single exclamation mark.', '1 character: !']
+          },
+          {
+            conceptTitle: 'Primary Conditional Branching',
+            conceptSyntax: '_____ (staminaThreshold > 50) {\n  initiateComboAttack();\n}',
+            conceptDesc: 'The foundation of flow control in procedural programming evaluates a parenthesized condition and executes its enclosed block if true.',
+            q: 'What primary keyword initiates a conditional execution branch?',
+            ans: 'if',
+            hints: ['Fundamental conditional statement.', 'Followed by parenthesized condition.', '2 letters: if']
+          },
+          {
+            conceptTitle: 'Alternative Fallback Execution',
+            conceptSyntax: 'if (ammunitionCount > 0) {\n  fireWeapon();\n} _____ {\n  reloadChamber();\n}',
+            conceptDesc: 'Paired directly with a preceding conditional check, this block executes automatically whenever the initial condition evaluates to false.',
+            q: 'What keyword executes alternative code when an "if" condition evaluates to false?',
+            ans: 'else',
+            hints: ['Fallback conditional path.', 'Cannot exist without preceding if.', '4 letters starting with e.']
+          },
+          {
+            conceptTitle: 'Integer Division Remainder',
+            conceptSyntax: 'int leftover = 17 _____ 5; // leftover stores 2\nif (n _____ 2 == 0) { /* even number */ }',
+            conceptDesc: 'Calculating remainders is essential for circular array wrapping and even/odd parity checks. This operator computes the modulus.',
+            q: 'What arithmetic operator returns the remainder of an integer division?',
+            ans: '%',
+            hints: ['Known as the modulo operator.', 'Percent sign.', '1 character: %']
+          },
+          {
+            conceptTitle: 'Compound Variable Addition',
+            conceptSyntax: 'energyLevel _____ 25;\n// Equivalent to: energyLevel = energyLevel + 25;',
+            conceptDesc: 'Arithmetic and assignment can be unified into an atomic shorthand that modifies the existing variable in place without repetition.',
+            q: 'What compound operator adds a value directly to an existing variable?',
+            ans: '+=',
+            hints: ['Combines addition with assignment.', 'Plus symbol followed by equals.', '2 characters: +=']
+          },
+          {
+            conceptTitle: 'Inline Conditional Expressions',
+            conceptSyntax: 'int highest = (valA > valB) _____ valA : valB;',
+            conceptDesc: 'Instead of writing a multiline if-else block to assign a value based on a condition, this ternary operator provides inline evaluation.',
+            q: 'What ternary operator pair forms an inline conditional expression?',
+            ans: '?:',
+            hints: ['Syntax: condition ? true_val : false_val', 'Question mark and colon.', '2 characters: ?:']
+          }
+        ]
+      },
+      '1_3': {
+        topic: 'Loops & Flow Controls',
+        drills: [
+          {
+            conceptTitle: 'Counted Loop Iterations',
+            conceptSyntax: '_____ (int idx = 0; idx < 10; ++idx) {\n  renderFrame(idx);\n}',
+            conceptDesc: 'This loop statement consolidates three control elements into parentheses: initialization, loop condition, and step increment.',
+            q: 'What loop keyword includes initialization, condition, and step in parentheses?',
+            ans: 'for',
+            hints: ['Standard counted loop.', 'Syntax: for(init; cond; step)', '3 letters: for']
+          },
+          {
+            conceptTitle: 'Condition-First Iterations',
+            conceptSyntax: '_____ (systemOnline) {\n  listenForPackets();\n}',
+            conceptDesc: 'When the exact number of iterations is unknown in advance, this loop repeats as long as its entry condition continues evaluating to true.',
+            q: 'What loop keyword tests its condition before executing its body statements?',
+            ans: 'while',
+            hints: ['Condition-controlled loop.', 'Checks condition at the top.', '5 letters starting with w.']
+          },
+          {
+            conceptTitle: 'Guaranteed Single Execution',
+            conceptSyntax: 'do {\n  readUserKeyboard();\n} _____ (invalidInputDetected);',
+            conceptDesc: 'Placing the condition check at the bottom ensures that the loop body executes at least once before evaluating continuation criteria.',
+            q: 'What loop construct is guaranteed to execute at least once before testing?',
+            ans: 'do-while',
+            hints: ['Starts with do and ends with while.', 'Condition is evaluated at the bottom.', 'Hyphenated: do-while']
+          },
+          {
+            conceptTitle: 'Immediate Loop Termination',
+            conceptSyntax: 'while (searching) {\n  if (targetAcquired) _____;\n}',
+            conceptDesc: 'When a search succeeds or an exit condition is met, this jump statement breaks out of the enclosing loop or switch immediately.',
+            q: 'What statement immediately exits and terminates the active loop?',
+            ans: 'break',
+            hints: ['Also used to prevent fall-through in switch.', 'Exits to the line after the loop.', '5 letters starting with b.']
+          },
+          {
+            conceptTitle: 'Bypassing Loop Iterations',
+            conceptSyntax: 'for (int i = 0; i < 20; ++i) {\n  if (i % 2 == 0) _____;\n  processOddNumber(i);\n}',
+            conceptDesc: 'To skip processing of the current element and jump directly to the evaluation of the next step without exiting the loop, use this statement.',
+            q: 'What statement skips remaining loop body code and jumps to next iteration?',
+            ans: 'continue',
+            hints: ['Skips the current cycle.', 'Does not terminate the loop.', '8 letters starting with c.']
+          },
+          {
+            conceptTitle: 'Multi-Way Constant Branching',
+            conceptSyntax: '_____ (commandCode) {\n  case 1: boot(); break;\n  case 2: shutdown(); break;\n}',
+            conceptDesc: 'When comparing a single integral expression against multiple discrete numeric or character options, this statement replaces nested if-else ladders.',
+            q: 'What keyword initiates multi-way integral branching against case labels?',
+            ans: 'switch',
+            hints: ['Evaluates integral expressions.', 'Paired with case and default labels.', '6 letters starting with s.']
+          },
+          {
+            conceptTitle: 'Matching Values in Branches',
+            conceptSyntax: 'switch (levelId) {\n  _____ 1: loadTutorial(); break;\n  _____ 2: loadBossFight(); break;\n}',
+            conceptDesc: 'Inside a switch block, this prefix precedes each individual constant value to be compared against the switch expression.',
+            q: 'What keyword precedes each matching value inside a switch statement?',
+            ans: 'case',
+            hints: ['Syntax: case VALUE:', 'Must be compile-time constants.', '4 letters starting with c.']
+          },
+          {
+            conceptTitle: 'Switch Fallback Handlers',
+            conceptSyntax: 'switch (action) {\n  case 1: ...; break;\n  _____: logUnknownAction(); break;\n}',
+            conceptDesc: 'If none of the explicit case values match the evaluated expression, control routes to this optional fallback label.',
+            q: 'What label in a switch statement acts as fallback when no cases match?',
+            ans: 'default',
+            hints: ['Similar to the final else branch.', 'Catches unhandled values.', '7 letters starting with d.']
+          },
+          {
+            conceptTitle: 'Pre-Evaluation Incrementing',
+            conceptSyntax: 'int n = 5;\nint res = _____n; // n becomes 6, res receives 6',
+            conceptDesc: 'This increment operator increments the variable value in memory BEFORE evaluating the surrounding expression.',
+            q: 'What operator adds 1 to an integer variable before evaluating its value?',
+            ans: '++',
+            hints: ['Unary pre-increment operator.', 'Two plus characters.', '2 characters: ++']
+          },
+          {
+            conceptTitle: 'Container Range Traversal',
+            conceptSyntax: 'int data[] = {1, 2, 3};\nfor (int val : data) {\n  std::cout << val;\n}',
+            conceptDesc: 'Introduced in C++11, this loop syntax traverses arrays and STL containers from beginning to end without index subscripts.',
+            q: 'What modern C++11 loop syntax iterates over collections without index counters?',
+            ans: 'range-for',
+            hints: ['Iterates over a range directly.', 'Uses colon syntax (for(auto x : c)).', 'Hyphenated: range-for']
+          }
+        ]
+      },
+      '1_4': {
+        topic: 'Functions & Scope',
+        drills: [
+          {
+            conceptTitle: 'Returning Data to Callers',
+            conceptSyntax: 'int computeProduct(int a, int b) {\n  _____ a * b;\n}',
+            conceptDesc: 'This statement terminates function execution and delivers the resulting calculated value back to the calling expression.',
+            q: 'What keyword immediately exits a function and returns a computed value?',
+            ans: 'return',
+            hints: ['Exits function execution.', 'Delivers value matching return type.', '6 letters starting with r.']
+          },
+          {
+            conceptTitle: 'Mandatory Entry Functions',
+            conceptSyntax: 'int _____() {\n  initializeEngine();\n  return 0;\n}',
+            conceptDesc: 'Every standalone executable C++ program requires this specific function signature as its starting point invoked by the operating system.',
+            q: 'What function serves as the mandatory entry point of all C++ executable programs?',
+            ans: 'main',
+            hints: ['int main()', 'Where C++ execution begins.', '4 letters starting with m.']
+          },
+          {
+            conceptTitle: 'Signature Pre-Declarations',
+            conceptSyntax: 'int calculateDamage(int power); // Declaration\n\nint main() { ... }',
+            conceptDesc: 'Declaring a function name, return type, and parameter list before its actual body definition allows top-down file ordering.',
+            q: 'Declaring a function signature before its full definition creates a...?',
+            ans: 'prototype',
+            hints: ['Also called forward declaration.', 'Informs compiler of signature.', '9 letters starting with p.']
+          },
+          {
+            conceptTitle: 'Sharing Function Identifiers',
+            conceptSyntax: 'void blast(int radius);\nvoid blast(int radius, double heat);',
+            conceptDesc: 'Defining multiple functions with the same name but distinct parameter types or counts is a core feature of C++ polymorphism.',
+            q: 'Having multiple functions with the same name but different parameters is called...?',
+            ans: 'overloading',
+            hints: ['Function overloading.', 'Resolved at compile-time by signature.', '11 letters starting with o.']
+          },
+          {
+            conceptTitle: 'Replacing Calls with Code Bodies',
+            conceptSyntax: '_____ int square(int x) {\n  return x * x;\n}',
+            conceptDesc: 'This keyword suggests that the compiler substitute the function body directly at each call site to eliminate stack push/pop overhead.',
+            q: 'What keyword suggests the compiler replace a call with direct body code?',
+            ans: 'inline',
+            hints: ['Reduces function call overhead.', 'Suggested for tiny functions.', '6 letters starting with i.']
+          },
+          {
+            conceptTitle: 'Block-Level Identifiers',
+            conceptSyntax: 'void routine() {\n  int temp = 42; // accessible only in routine\n}',
+            conceptDesc: 'Variables declared inside a function or block exist only while that block is executing and are destroyed upon exit.',
+            q: 'Variables declared inside a function block have what kind of scope? (local/global)',
+            ans: 'local',
+            hints: ['Destroyed when stack frame unwinds.', 'Opposite of global scope.', '5 letters: local']
+          },
+          {
+            conceptTitle: 'Persistent Stack Variables',
+            conceptSyntax: 'void counter() {\n  _____ int hits = 0;\n  hits++;\n}',
+            conceptDesc: 'Declaring a local variable with this modifier allocates it in static storage duration, preserving its value across subsequent invocations.',
+            q: 'What keyword enables a local variable to retain its value between function calls?',
+            ans: 'static',
+            hints: ['Allocated only once.', 'Retains state between calls.', '6 letters starting with s.']
+          },
+          {
+            conceptTitle: 'Direct Parameter Mutation',
+            conceptSyntax: 'void restore(int_____ healthPool) {\n  healthPool += 50; // mutates original\n}',
+            conceptDesc: 'To allow a function to modify the caller variable directly without copying large structs, append this symbol to the type declaration.',
+            q: 'What symbol passes a parameter by reference without creating a copy?',
+            ans: '&',
+            hints: ['Ampersand character.', 'Passes alias to original memory.', '1 character: &']
+          },
+          {
+            conceptTitle: 'Assigning Fallback Arguments',
+            conceptSyntax: 'void triggerExplosion(int radius _____ 15);',
+            conceptDesc: 'Functions can specify optional parameters that receive default values if the caller omits them during invocation.',
+            q: 'What operator assigns default parameter fallback values in function declarations?',
+            ans: '=',
+            hints: ['Single assignment operator.', 'E.g., void f(int x = 0)', '1 character: =']
+          },
+          {
+            conceptTitle: 'Resolving Namespace Symbols',
+            conceptSyntax: 'std_____cout << "Accessing standard namespace";',
+            conceptDesc: 'To specify which namespace, class, or global scope a function or identifier belongs to, this operator is placed between identifiers.',
+            q: 'What operator resolves scope to access global or namespace symbols?',
+            ans: '::',
+            hints: ['Scope resolution operator.', 'Two colons together.', '2 characters: ::']
+          }
+        ]
+      },
+      '2_1': {
+        topic: 'Fixed Arrays & Subscript',
+        drills: [
+          {
+            conceptTitle: 'Zero-Based Offset Calculations',
+            conceptSyntax: 'int buffer[3] = {10, 20, 30};\nint initial = buffer[_____]; // accesses 10',
+            conceptDesc: 'Array subscripts represent the offset count from the starting memory address. Hence, the very first element resides at offset zero.',
+            q: 'What is the numeric index of the very first element in any C++ array?',
+            ans: '0',
+            hints: ['Arrays are zero-indexed.', 'Zero offset from base address.', 'Single digit: 0']
+          },
+          {
+            conceptTitle: 'Index Subscript Notations',
+            conceptSyntax: 'int score = playerRanks_____2_____;\nplayerRanks_____2_____ = 99;',
+            conceptDesc: 'Element access in raw arrays, vectors, and pointer buffers relies on this paired bracket notation to calculate offset positions.',
+            q: 'What bracket characters are used for array index subscript access?',
+            ans: '[]',
+            hints: ['Square brackets.', 'Encloses the index number.', '2 characters: []']
+          },
+          {
+            conceptTitle: 'Compile-Time Buffer Allocation',
+            conceptSyntax: 'int stackStorage[100]; // Size cannot change during runtime',
+            conceptDesc: 'Standard C-style arrays allocated on the stack require compile-time size specifications and cannot be resized while running.',
+            q: 'Are standard stack C-style arrays fixed in size or dynamically resizable?',
+            ans: 'fixed',
+            hints: ['Cannot grow or shrink at runtime.', 'Opposite of dynamic.', '5 letters: fixed']
+          },
+          {
+            conceptTitle: 'Terminal Array Offsets',
+            conceptSyntax: 'int measurements[10];\nmeasurements[_____] = 42; // last valid index',
+            conceptDesc: 'Because arrays start at index 0, an array dimensioned with N items terminates at offset N - 1. For a size of 10, the end is at index 9.',
+            q: 'What is the index of the last element in an array with 10 elements?',
+            ans: '9',
+            hints: ['Array size minus 1.', '10 - 1 = ?', 'Single digit: 9']
+          },
+          {
+            conceptTitle: 'Runtime Bounds Verification',
+            conceptSyntax: 'int small[5];\n// small[99] = 10; // C++ will NOT stop you; causes memory corruption!',
+            conceptDesc: 'For speed and direct memory access, raw C++ array brackets do not perform bounds checking, making out-of-bounds access undefined.',
+            q: 'Does C++ automatically check bounds at runtime for raw array subscripts? (yes/no)',
+            ans: 'no',
+            hints: ['Leaves memory protection to the developer.', 'Out-of-bounds causes undefined behavior.', '2 letters: no']
+          },
+          {
+            conceptTitle: 'Physical Memory Alignment',
+            conceptSyntax: '&arr[1] == (char*)&arr[0] + sizeof(element);',
+            conceptDesc: 'Array elements are arranged adjacent to one another in RAM without gaps, providing spatial locality and cache efficiency.',
+            q: 'What term describes how array elements sit side-by-side in memory?',
+            ans: 'contiguous',
+            hints: ['Consecutive adjacent memory layout.', 'No gaps between elements.', '10 letters starting with c.']
+          },
+          {
+            conceptTitle: 'Array-to-Pointer Decay',
+            conceptSyntax: 'void inspect(int* p); // array decays to pointer\ninspect(myArray);',
+            conceptDesc: 'When an array identifier is passed into a function, it decays into an address pointer referencing its first element (&arr[0]).',
+            q: 'When passed into a function, what does a raw array decay into?',
+            ans: 'pointer',
+            hints: ['Stores memory address of element 0.', 'Loses array size information.', '7 letters starting with p.']
+          },
+          {
+            conceptTitle: 'Standard Array Wrappers',
+            conceptSyntax: '#include <_____>\nstd::_____<int, 5> safeBuffer = {1, 2, 3, 4, 5};',
+            conceptDesc: 'The STL provides a template container wrapper that bundles fixed-size arrays with member methods like .size() and iterators.',
+            q: 'What standard library header wraps fixed-size arrays with modern STL methods?',
+            ans: 'array',
+            hints: ['#include <array>', 'std::array container.', '5 letters: array']
+          },
+          {
+            conceptTitle: 'Aggregate Zero Initialization',
+            conceptSyntax: 'int matrixBuffer[50] = {_____};\n// All 50 elements initialized to zero',
+            conceptDesc: 'Explicitly initializing the first element to 0 in braces causes all remaining unmentioned elements to be value-initialized to 0.',
+            q: 'What value is filled across all elements when initializing: int arr[5] = {0}?',
+            ans: '0',
+            hints: ['Clears all elements to zero.', 'Value-initialization default.', 'Single digit: 0']
+          },
+          {
+            conceptTitle: 'Exception-Checked Element Access',
+            conceptSyntax: 'std::array<int, 4> a = {1, 2, 3, 4};\na._____(2); // Safe access; throws std::out_of_range if invalid',
+            conceptDesc: 'Unlike subscript brackets, this member method checks bounds at runtime and throws an out_of_range exception on invalid offsets.',
+            q: 'What method of std::array accesses elements with bounds checking: .at()?',
+            ans: 'at',
+            hints: ['Safe indexing method.', 'Throws exception on failure.', '2 letters: at']
+          }
+        ]
+      },
+      '2_2': {
+        topic: 'C++ Strings & Stream I/O',
+        drills: [
+          {
+            conceptTitle: 'Dynamic String Header',
+            conceptSyntax: '#include <_____>\nstd::string playerTag = "Shinobi";',
+            conceptDesc: 'Managing dynamic character sequences without manual memory tracking requires the standard library string header.',
+            q: 'What standard library header must be included to use std::string?',
+            ans: 'string',
+            hints: ['#include <string>', 'Provides the std::string class.', '6 letters: string']
+          },
+          {
+            conceptTitle: 'Inspecting Character Counts',
+            conceptSyntax: 'std::string codename = "Vortex";\nint totalChars = codename._____();',
+            conceptDesc: 'To determine how many characters are stored inside a string object, this member method queries the internal length.',
+            q: 'What member function returns the number of characters in a string?',
+            ans: 'length',
+            hints: ['Synonym of size().', 'Returns size_t count of characters.', '6 letters starting with l.']
+          },
+          {
+            conceptTitle: 'String Concatenation Overload',
+            conceptSyntax: 'std::string greeting = "Hello" _____ " World";',
+            conceptDesc: 'The addition operator is overloaded for strings to concatenate and append character sequences together.',
+            q: 'What operator concatenates two std::string objects together?',
+            ans: '+',
+            hints: ['Arithmetic addition symbol.', 'Combines text together.', '1 character: +']
+          },
+          {
+            conceptTitle: 'C-Style String Terminators',
+            conceptSyntax: 'char rawText[] = {\'O\', \'K\', \'_____\'};',
+            conceptDesc: 'Traditional C-style character arrays rely on a special sentinel null byte (ASCII 0) to mark the end of the text stream.',
+            q: 'What escape character terminates traditional C-style character arrays?',
+            ans: '\\0',
+            hints: ['Null terminator character.', 'Backslash followed by zero.', '2 characters: \\0']
+          },
+          {
+            conceptTitle: 'Console Text Output Stream',
+            conceptSyntax: 'std::_____ << "Mission Commenced";',
+            conceptDesc: 'This standard stream object defined in <iostream> sends formatted text and variable values to the user console display.',
+            q: 'What standard output stream object prints characters to the console in C++?',
+            ans: 'cout',
+            hints: ['Paired with << operator.', 'Character Output.', '4 letters starting with c.']
+          },
+          {
+            conceptTitle: 'Console Text Input Stream',
+            conceptSyntax: 'int targetId;\nstd::_____ >> targetId;',
+            conceptDesc: 'This standard stream object reads formatted keystroke characters from the console keyboard into application variables.',
+            q: 'What standard input stream object reads keyboard data from the console?',
+            ans: 'cin',
+            hints: ['Paired with >> operator.', 'Character Input.', '3 letters starting with c.']
+          },
+          {
+            conceptTitle: 'Stream Insertion Direction',
+            conceptSyntax: 'std::cout _____ "Data stream direction";',
+            conceptDesc: 'Directing data into an output stream uses this pair of leftward-pointing angle brackets to insert values.',
+            q: 'What stream insertion operator directs data into std::cout?',
+            ans: '<<',
+            hints: ['Two left-pointing angle brackets.', 'Directs data into stream.', '2 characters: <<']
+          },
+          {
+            conceptTitle: 'Stream Extraction Direction',
+            conceptSyntax: 'std::cin _____ userNumber;',
+            conceptDesc: 'Extracting data out of an input stream uses this pair of rightward-pointing angle brackets to extract values into variables.',
+            q: 'What stream extraction operator pulls data from std::cin into variables?',
+            ans: '>>',
+            hints: ['Two right-pointing angle brackets.', 'Extracts data from stream.', '2 characters: >>']
+          },
+          {
+            conceptTitle: 'Line Feed and Buffer Flush',
+            conceptSyntax: 'std::cout << "Line complete" << std::_____;',
+            conceptDesc: 'This stream manipulator inserts an explicit newline into the stream and forces an immediate flush of the memory buffer.',
+            q: 'What stream manipulator outputs a newline character and flushes the buffer?',
+            ans: 'endl',
+            hints: ['Short for end line.', 'Inserts \\n and flushes.', '4 letters: endl']
+          },
+          {
+            conceptTitle: 'Reading Complete Sentences',
+            conceptSyntax: 'std::string dialogueLine;\nstd::_____(std::cin, dialogueLine);',
+            conceptDesc: 'While standard cin extraction stops at spaces, this function captures full lines of text including spaces until Enter is pressed.',
+            q: 'What function reads an entire line containing spaces from an input stream?',
+            ans: 'getline',
+            hints: ['Reads until newline delimiter.', 'std::getline(stream, string)', '7 letters starting with g.']
+          }
+        ]
+      },
+      '2_3': {
+        topic: 'Pointers & Address Logic',
+        drills: [
+          {
+            conceptTitle: 'Extracting Memory Coordinates',
+            conceptSyntax: 'int score = 42;\nint* addressHolder = _____score;',
+            conceptDesc: 'Variables exist at physical memory addresses in RAM. Prepending this unary operator retrieves that memory address.',
+            q: 'What operator extracts the memory address of an existing variable?',
+            ans: '&',
+            hints: ['Address-of operator.', 'Ampersand symbol.', '1 character: &']
+          },
+          {
+            conceptTitle: 'Pointer Indirection & Retrieval',
+            conceptSyntax: 'int storedValue = _____addressHolder;\n_____addressHolder = 99;',
+            conceptDesc: 'To read or write the actual data value stored at the memory location a pointer references, prepend the dereference operator.',
+            q: 'What operator dereferences a pointer to access its targeted value?',
+            ans: '*',
+            hints: ['Dereference / indirection operator.', 'Asterisk symbol.', '1 character: *']
+          },
+          {
+            conceptTitle: 'Type-Safe Null Pointers',
+            conceptSyntax: 'int* cleanPointer = _____;',
+            conceptDesc: 'Older C used 0 or NULL which caused ambiguity with integers. Modern C++11 introduced this dedicated type-safe null pointer literal.',
+            q: 'What keyword represents a type-safe null pointer literal in modern C++?',
+            ans: 'nullptr',
+            hints: ['Introduced in C++11.', 'Replaces NULL and 0 for pointers.', '7 letters starting with n.']
+          },
+          {
+            conceptTitle: 'Pointer Value Characteristics',
+            conceptSyntax: 'std::cout << ptr; // Prints hexadecimal RAM coordinate',
+            conceptDesc: 'Pointers do not store regular application data numbers; their values represent hexadecimal memory location coordinates.',
+            q: 'What type of values representing RAM locations do pointers hold?',
+            ans: 'address',
+            hints: ['Hexadecimal memory coordinate.', 'Where bytes live in RAM.', '7 letters starting with a.']
+          },
+          {
+            conceptTitle: 'Member Pointer Indirection',
+            conceptSyntax: 'Hero* h = &ninja;\nh_____performStrike(); // Equivalent to (*h).performStrike()',
+            conceptDesc: 'When accessing members through a pointer to an object, this arrow operator combines dereferencing and member selection.',
+            q: 'What operator accesses members of a struct or class through a pointer?',
+            ans: '->',
+            hints: ['Arrow operator.', 'Hyphen followed by greater-than.', '2 characters: ->']
+          },
+          {
+            conceptTitle: '64-Bit Pointer Dimensions',
+            conceptSyntax: 'size_t ptrSize = sizeof(double*); // Equal for all pointer types',
+            conceptDesc: 'In 64-bit systems, memory addresses are 64 bits wide. Thus, every pointer occupies the exact same byte footprint regardless of type.',
+            q: 'What is the byte size of any pointer on a standard 64-bit operating system?',
+            ans: '8',
+            hints: ['64 bits divided by 8 bits/byte.', 'Same for int*, char*, void*.', 'Single digit: 8']
+          },
+          {
+            conceptTitle: 'Generic Typeless Pointers',
+            conceptSyntax: '_____* rawMemoryBlock = &anyVariable;',
+            conceptDesc: 'When writing low-level allocators that handle raw memory addresses without knowing the underlying data type, this generic pointer is used.',
+            q: 'What generic pointer type can point to any data type without type safety: ...*?',
+            ans: 'void',
+            hints: ['Typeless pointer.', 'void* generic pointer.', '4 letters: void']
+          },
+          {
+            conceptTitle: 'Re-binding Pointer Targets',
+            conceptSyntax: 'int a = 1, b = 2;\nint* p = &a;\np = &b; // Valid reassignment',
+            conceptDesc: 'Unlike references which permanently bind to their initial object, a pointer is a mutable variable that can point elsewhere at any time.',
+            q: 'Can a pointer change which memory address it points to over its lifetime? (yes/no)',
+            ans: 'yes',
+            hints: ['Pointers are reassignable.', 'Unlike references, targets can vary.', '3 letters: yes']
+          },
+          {
+            conceptTitle: 'Deallocated Memory Hazards',
+            conceptSyntax: 'int* p = new int(10);\ndelete p;\n// p now points to freed memory!',
+            conceptDesc: 'A pointer retaining an address to memory that has already been deallocated creates severe stability and security vulnerabilities.',
+            q: 'A pointer pointing to deallocated or invalid memory is called a... pointer?',
+            ans: 'dangling',
+            hints: ['Hazardous memory state.', 'Points to expired memory.', '8 letters starting with d.']
+          },
+          {
+            conceptTitle: 'Multiple Levels of Indirection',
+            conceptSyntax: 'int val = 5;\nint* p = &val;\nint_____ pp = &p; // stores address of pointer',
+            conceptDesc: 'To store the address of a pointer variable itself, add another level of indirection denoted by an additional asterisk.',
+            q: 'A pointer storing the address of another pointer has how many asterisks in its type: int... p?',
+            ans: '**',
+            hints: ['Double pointer.', 'Two asterisks.', '2 characters: **']
+          }
+        ]
+      },
+      '2_4': {
+        topic: 'References & Dynamic Heap',
+        drills: [
+          {
+            conceptTitle: 'Manual Heap Allocation',
+            conceptSyntax: 'int* dynamicInt = _____ int(100);',
+            conceptDesc: 'When data must persist beyond local stack scopes or its size is decided at runtime, this keyword allocates memory from the heap.',
+            q: 'What keyword allocates dynamic memory on the system heap?',
+            ans: 'new',
+            hints: ['Allocates on free store / heap.', 'Returns pointer to memory.', '3 letters: new']
+          },
+          {
+            conceptTitle: 'Releasing Single Heap Objects',
+            conceptSyntax: '_____ dynamicInt; // Relinquishes memory back to OS',
+            conceptDesc: 'Every heap object allocated with new must be explicitly deallocated using this keyword to prevent memory leaks.',
+            q: 'What keyword deallocates dynamically allocated single-object heap memory?',
+            ans: 'delete',
+            hints: ['Paired with new.', 'Releases heap memory.', '6 letters starting with d.']
+          },
+          {
+            conceptTitle: 'Releasing Dynamic Arrays',
+            conceptSyntax: 'int* dynamicArr = new int[50];\n_____ dynamicArr; // Array deletion',
+            conceptDesc: 'When dynamic arrays are allocated using new[ ], releasing them requires matching array brackets to call destructors on all items.',
+            q: 'What delete syntax variant must be used when freeing dynamically allocated arrays?',
+            ans: 'delete[]',
+            hints: ['delete followed by square brackets.', 'Releases array buffers.', '8 characters: delete[]']
+          },
+          {
+            conceptTitle: 'Reference Immutability of Target',
+            conceptSyntax: 'int a = 10, b = 20;\nint& ref = a;\nref = b; // assigns value of b into a; does NOT re-bind ref!',
+            conceptDesc: 'References act as permanent syntactic aliases for the object they are initialized with and cannot be reseated to point to another object.',
+            q: 'Can a C++ reference be reseated to refer to a different variable later? (yes/no)',
+            ans: 'no',
+            hints: ['References bind permanently on creation.', 'Assignments mutate target value.', '2 letters: no']
+          },
+          {
+            conceptTitle: 'Unclaimed Heap Accumulation',
+            conceptSyntax: 'void allocateAndForget() {\n  int* p = new int(10);\n} // pointer destroyed, heap memory lost forever!',
+            conceptDesc: 'Losing all pointer references to dynamically allocated heap memory without calling delete leaves memory permanently occupied.',
+            q: 'Failing to deallocate heap memory before losing its pointer causes a memory...?',
+            ans: 'leak',
+            hints: ['Unclaimed lost memory.', 'Gradually exhausts RAM.', '4 letters: leak']
+          },
+          {
+            conceptTitle: 'Heap vs Stack Regions',
+            conceptSyntax: 'int a = 5;       // Stack (automatic lifespan)\nint* b = new int; // Heap (manual lifespan)',
+            conceptDesc: 'Stack variables are automatically cleaned up when exiting scope. Manually managed dynamic allocations reside in this area.',
+            q: 'What memory area holds dynamically allocated objects created by new: stack or heap?',
+            ans: 'heap',
+            hints: ['Dynamic memory region.', 'Also called free store.', '4 letters: heap']
+          },
+          {
+            conceptTitle: 'Exclusive Ownership Smart Pointers',
+            conceptSyntax: '#include <memory>\nstd::unique_____<int> ptr = std::make_unique<int>(10);',
+            conceptDesc: 'This RAII smart pointer owns a heap resource exclusively and automatically frees its memory when the pointer leaves scope.',
+            q: 'What smart pointer owns an object exclusively with zero overhead: unique_...?',
+            ans: 'ptr',
+            hints: ['std::unique_ptr', 'Cannot be copied, only moved.', '3 letters: ptr']
+          },
+          {
+            conceptTitle: 'Reference-Counted Smart Pointers',
+            conceptSyntax: 'std::shared_____<int> p1 = std::make_shared<int>(20);\nstd::shared_____<int> p2 = p1; // Count is 2',
+            conceptDesc: 'When multiple systems share ownership of a heap resource, this smart pointer increments a counter and frees memory when count reaches 0.',
+            q: 'What smart pointer shares ownership via reference counting: shared_...?',
+            ans: 'ptr',
+            hints: ['std::shared_ptr', 'Maintains reference count.', '3 letters: ptr']
+          },
+          {
+            conceptTitle: 'Safe Unique Allocation Function',
+            conceptSyntax: 'auto safePtr = std::make______<Weapon>(42);',
+            conceptDesc: 'This factory function in <memory> constructs objects dynamically and wraps them in a unique_ptr without raw new calls.',
+            q: 'What modern C++ function safely constructs a unique_ptr: make_...()?',
+            ans: 'unique',
+            hints: ['std::make_unique', 'Exception-safe construction.', '6 letters starting with u.']
+          },
+          {
+            conceptTitle: 'Safety of Deleting Nullptr',
+            conceptSyntax: 'int* emptyPtr = nullptr;\ndelete emptyPtr; // Does this crash or execute safely?',
+            conceptDesc: 'The C++ standard guarantees that invoking delete on a nullptr is a safe no-operation and will never cause a crash.',
+            q: 'Can delete be safely invoked on a nullptr without causing a crash? (yes/no)',
+            ans: 'yes',
+            hints: ['Guaranteed safe no-op by standard.', 'Does not require an if(ptr != nullptr) check.', '3 letters: yes']
+          }
+        ]
+      },
+      '3_1': {
+        topic: 'Classes & Encapsulation',
+        drills: [
+          {
+            conceptTitle: 'Class Structure Definitions',
+            conceptSyntax: '_____ Shinobi {\npublic:\n  void performTechnique();\n};',
+            conceptDesc: 'This keyword declares a user-defined blueprint that encapsulates state variables and functional operations together.',
+            q: 'What keyword defines a class blueprint structure in C++?',
+            ans: 'class',
+            hints: ['Object blueprint keyword.', 'Members default to private.', '5 letters: class']
+          },
+          {
+            conceptTitle: 'Class Access Defaults',
+            conceptSyntax: 'class Vault {\n  int secretPasscode; // What is the access level here?\n};',
+            conceptDesc: 'Unless an explicit access specifier is written, all member variables and functions declared in a class default to restricted access.',
+            q: 'What is the default access specifier for members inside a class?',
+            ans: 'private',
+            hints: ['Hidden from external access.', 'Default for class, opposite of struct.', '7 letters starting with p.']
+          },
+          {
+            conceptTitle: 'Struct Access Defaults',
+            conceptSyntax: 'struct Coordinate {\n  int x, y; // What is the access level here?\n};',
+            conceptDesc: 'In C++, structs and classes are identical except that struct members default to open visibility for lightweight data aggregates.',
+            q: 'What is the default access specifier for members inside a struct in C++?',
+            ans: 'public',
+            hints: ['Accessible by default.', 'Default for struct.', '6 letters starting with p.']
+          },
+          {
+            conceptTitle: 'Exposing Interface Methods',
+            conceptSyntax: 'class Character {\n_____: // Make accessible to all\n  void jump();\n};',
+            conceptDesc: 'Members placed beneath this specifier form the public API of the class, accessible from any function in the program.',
+            q: 'What access specifier makes class members accessible from outside code?',
+            ans: 'public',
+            hints: ['Opposite of private.', 'Accessible from anywhere.', '6 letters: public']
+          },
+          {
+            conceptTitle: 'Class Blueprint Instances',
+            conceptSyntax: 'Shinobi shadowNinja; // shadowNinja is an instance of Shinobi',
+            conceptDesc: 'While a class serves as the conceptual blueprint, an actual tangible entity instantiated in memory is called an instance.',
+            q: 'An instantiated variable of a class type loaded in memory is called an...?',
+            ans: 'object',
+            hints: ['An instance of a class.', 'Object-oriented programming.', '6 letters starting with o.']
+          },
+          {
+            conceptTitle: 'Self-Referencing Member Pointers',
+            conceptSyntax: 'void setHealth(int hp) {\n  _____->hp = hp; // Disambiguates member from parameter\n}',
+            conceptDesc: 'Inside non-static member methods, this implicit pointer references the specific object instance executing the method.',
+            q: 'What hidden pointer inside member functions points to the active object instance?',
+            ans: 'this',
+            hints: ['Implicit self-pointer.', 'Used to access instance members.', '4 letters: this']
+          },
+          {
+            conceptTitle: 'Privileged Non-Member Functions',
+            conceptSyntax: 'class Treasury {\n  _____ void inspectVault(const Treasury& t);\n};',
+            conceptDesc: 'This keyword grants an outside function or class special permission to access private and protected members.',
+            q: 'What keyword grants a non-member function access to private class members?',
+            ans: 'friend',
+            hints: ['Grants external access.', 'friend function / class.', '6 letters starting with f.']
+          },
+          {
+            conceptTitle: 'State-Preserving Member Functions',
+            conceptSyntax: 'int getScore() _____ {\n  // Mutating member variables here causes compile error!\n  return score;\n}',
+            conceptDesc: 'Appending this keyword to a member method promises that calling it will not modify any member variables of the calling object.',
+            q: 'What keyword declared on a member function guarantees it will not mutate state?',
+            ans: 'const',
+            hints: ['Placed after parameter list.', 'Ensures read-only behavior.', '5 letters: const']
+          },
+          {
+            conceptTitle: 'Class-Wide Shared Attributes',
+            conceptSyntax: 'class Unit {\npublic:\n  _____ int totalSpawnedUnits;\n};',
+            conceptDesc: 'Applying this keyword to a member variable creates a single shared copy across all instances of the class rather than one per object.',
+            q: 'What keyword makes a member variable shared across all class instances?',
+            ans: 'static',
+            hints: ['Shared class-level variable.', 'Does not require object instance to read.', '6 letters starting with s.']
+          },
+          {
+            conceptTitle: 'Hiding Internal Implementations',
+            conceptSyntax: 'class BankAccount {\nprivate: double balance;\npublic: void deposit(double amt) { /* validated */ }\n};',
+            conceptDesc: 'This core OOP pillar bundles data with operations while restricting direct access to internal state to ensure integrity.',
+            q: 'What OOP pillar bundles data with methods and hides internal implementation details?',
+            ans: 'encapsulation',
+            hints: ['Information hiding.', 'One of the four core pillars of OOP.', '13 letters starting with e.']
+          }
+        ]
+      },
+      '3_2': {
+        topic: 'Constructors & Destructors',
+        drills: [
+          {
+            conceptTitle: 'Object Initialization Methods',
+            conceptSyntax: 'class Katana {\npublic:\n  Katana(); // Automatically called upon instantiation\n};',
+            conceptDesc: 'This special member function shares the exact name of the class and runs automatically when an object is created.',
+            q: 'What special method shares the exact name as the class to initialize objects?',
+            ans: 'constructor',
+            hints: ['Initializes object fields.', 'Has no return type.', '11 letters starting with c.']
+          },
+          {
+            conceptTitle: 'Resource Cleanup Methods',
+            conceptSyntax: 'class Katana {\npublic:\n  _____Katana(); // Automatically called upon object destruction\n};',
+            conceptDesc: 'This member function executes automatically when an object leaves scope or is deleted, releasing any acquired resources.',
+            q: 'What character prefixes the class name to declare a destructor method?',
+            ans: '~',
+            hints: ['Tilde character.', 'Prefix for destructors.', '1 character: ~']
+          },
+          {
+            conceptTitle: 'Destructor Argument Limitations',
+            conceptSyntax: '~Katana(int code); // Is this valid C++ syntax?',
+            conceptDesc: 'Because destructors are invoked automatically by the runtime when objects expire, they cannot accept any arguments.',
+            q: 'Can a destructor accept arguments or parameters in C++? (yes/no)',
+            ans: 'no',
+            hints: ['Destructors cannot be overloaded.', 'Takes zero arguments.', '2 letters: no']
+          },
+          {
+            conceptTitle: 'Multiple Object Constructors',
+            conceptSyntax: 'Warrior();\nWarrior(int hp);\nWarrior(int hp, std::string tag);',
+            conceptDesc: 'Classes can provide several constructors with distinct parameter lists, allowing objects to be initialized in different ways.',
+            q: 'Can a class have multiple overloaded constructors? (yes/no)',
+            ans: 'yes',
+            hints: ['Constructors support overloading.', 'Allows flexible initialization.', '3 letters: yes']
+          },
+          {
+            conceptTitle: 'Zero-Argument Constructors',
+            conceptSyntax: 'Warrior() = _____; // Compiler-synthesized zero-argument constructor',
+            conceptDesc: 'A constructor that can be called with no arguments is called this type of constructor and initializes default member states.',
+            q: 'A constructor taking zero arguments is called what kind of constructor?',
+            ans: 'default',
+            hints: ['Default constructor.', 'Can be defaulted with = default.', '7 letters starting with d.']
+          },
+          {
+            conceptTitle: 'Pre-Body Member Initializers',
+            conceptSyntax: 'Warrior(int h) _____ health(h), armor(50) {\n  // Constructor body runs after initializers\n}',
+            conceptDesc: 'Placing this punctuation after the constructor parameter list starts the member initializer list to initialize members directly.',
+            q: 'What colon syntax initializes member variables before constructor body runs: ?',
+            ans: ':',
+            hints: ['Single colon character.', 'Introduces member initializer list.', '1 character: :']
+          },
+          {
+            conceptTitle: 'Duplicating Existing Objects',
+            conceptSyntax: 'Warrior(const Warrior& existingObj); // Duplication constructor',
+            conceptDesc: 'This constructor initializes a new object by copying the fields of an existing instance of the same class.',
+            q: 'What constructor initializes an object from an existing object of same type?',
+            ans: 'copy',
+            hints: ['Copy constructor: T(const T&)', 'Creates duplicate instance.', '4 letters: copy']
+          },
+          {
+            conceptTitle: 'Stealing Temporary Resources',
+            conceptSyntax: 'Warrior(Warrior&& expiringObj) noexcept; // Resource transfer',
+            conceptDesc: 'Instead of performing an expensive deep copy from a temporary object, this constructor transfers ownership of existing buffers.',
+            q: 'What constructor transfers ownership of resources from a temporary object?',
+            ans: 'move',
+            hints: ['Move constructor: T(T&&)', 'Utilizes rvalue references.', '4 letters: move']
+          },
+          {
+            conceptTitle: 'Preventing Implicit Conversions',
+            conceptSyntax: '_____ Warrior(int initialRank); // Prevents: Warrior w = 5;',
+            conceptDesc: 'Single-parameter constructors can accidentally trigger unintended implicit conversions. This keyword forbids implicit casting.',
+            q: 'What keyword prevents implicit constructor single-argument conversions?',
+            ans: 'explicit',
+            hints: ['Prevents implicit casts.', 'Enforces explicit construction.', '8 letters starting with e.']
+          },
+          {
+            conceptTitle: 'Base Class Destructor Polymorphism',
+            conceptSyntax: 'class Base {\npublic:\n  _____ ~Base(); // Ensures derived destructors run on delete\n};',
+            conceptDesc: 'Base classes meant for inheritance must declare a "virtual" destructor to ensure derived class destructors run when deleting through Base*.',
+            q: 'What keyword should qualify base class destructors to ensure clean polymorphic deletion?',
+            ans: 'virtual',
+            hints: ['Virtual destructor.', 'Prevents partial resource leaks.', '7 letters starting with v.']
+          }
+        ]
+      },
+      '3_3': {
+        topic: 'Inheritance & Overriding',
+        drills: [
+          {
+            conceptTitle: 'Class Derivation Syntax',
+            conceptSyntax: 'class Boss _____ public Shinobi {\n  // Boss inherits from Shinobi\n};',
+            conceptDesc: 'To declare that a new class derives from an existing base class, this punctuation separates the derived name from the base specification.',
+            q: 'What colon syntax declares inheritance: class Derived _ public Base?',
+            ans: ':',
+            hints: ['Single colon symbol.', 'Specifies base inheritance.', '1 character: :']
+          },
+          {
+            conceptTitle: 'Subclass-Only Accessibility',
+            conceptSyntax: 'class Vehicle {\n_____: // Accessible to subclasses, hidden from external callers\n  int engineChassisId;\n};',
+            conceptDesc: 'This access specifier allows derived subclasses to access member variables while keeping them encapsulated away from general code.',
+            q: 'What access specifier allows derived children access while hiding from public?',
+            ans: 'protected',
+            hints: ['Between public and private.', 'Visible down inheritance hierarchy.', '9 letters starting with p.']
+          },
+          {
+            conceptTitle: 'Enabling Dynamic Method Dispatch',
+            conceptSyntax: 'class Unit {\n  _____ void attack(); // Dispatches according to runtime object type\n};',
+            conceptDesc: 'By default, C++ binds member calls at compile-time. This keyword instructs the compiler to enable dynamic runtime dispatch.',
+            q: 'What keyword enables polymorphic dynamic dispatch in base class methods?',
+            ans: 'virtual',
+            hints: ['Enables dynamic override.', 'Builds vtable entry.', '7 letters starting with v.']
+          },
+          {
+            conceptTitle: 'Enforcing Override Signatures',
+            conceptSyntax: 'class Boss : public Unit {\n  void attack() _____; // Compiler verifies base signature match\n};',
+            conceptDesc: 'This contextual keyword ensures that the method matches an existing virtual function in the base class, preventing spelling mistakes.',
+            q: 'What contextual keyword explicitly marks derived methods overriding base methods?',
+            ans: 'override',
+            hints: ['Catches accidental signature mismatch.', 'Placed after parameter list.', '8 letters starting with o.']
+          },
+          {
+            conceptTitle: 'Preventing Subclass Derivation',
+            conceptSyntax: 'class EndGameBoss _____ : public Boss {\n  // Cannot be inherited any further\n};',
+            conceptDesc: 'When an inheritance hierarchy should terminate, appending this specifier prevents any other class from deriving from it.',
+            q: 'What specifier prevents a class from being inherited or method from being overridden?',
+            ans: 'final',
+            hints: ['Prevents further inheritance.', 'Terminates inheritance chain.', '5 letters: final']
+          },
+          {
+            conceptTitle: 'Deriving Multiple Base Classes',
+            conceptSyntax: 'class CyborgNinja : public Machine, public Warrior {};',
+            conceptDesc: 'Unlike some single-inheritance languages, C++ allows a derived class to inherit interfaces and members from multiple base parents.',
+            q: 'Can a C++ class inherit from more than one parent base class? (yes/no)',
+            ans: 'yes',
+            hints: ['Multiple inheritance is supported.', 'Syntax: class D : public B1, public B2', '3 letters: yes']
+          },
+          {
+            conceptTitle: 'Multiple Inheritance Ambiguities',
+            conceptSyntax: '   Base\n  /    \\\n Left  Right\n  \\    /\n   Derived',
+            conceptDesc: 'When two parent classes share a common ancestor, the derived class can inherit duplicate copies of the base, creating this problem.',
+            q: 'What diamond-shaped problem arises in multiple inheritance when parents share common base?',
+            ans: 'diamond',
+            hints: ['Named after diamond diagram shape.', 'Creates ambiguous member paths.', '7 letters: diamond']
+          },
+          {
+            conceptTitle: 'Deduplicating Base Instances',
+            conceptSyntax: 'class Left : _____ public Base {};\nclass Right : _____ public Base {};',
+            conceptDesc: 'To resolve the diamond problem and ensure only one shared instance of the common ancestor exists, use this inheritance modifier.',
+            q: 'What keyword resolves the diamond problem in inheritance: ... public Base ?',
+            ans: 'virtual',
+            hints: ['Virtual inheritance.', 'Shares single common base instance.', '7 letters: virtual']
+          },
+          {
+            conceptTitle: 'Polymorphic Base Pointer Assignment',
+            conceptSyntax: 'Boss bossMonster;\nUnit* unitRef = &bossMonster; // Polymorphic assignment',
+            conceptDesc: 'A pointer of type Base* can hold the memory address of any Derived class object, enabling uniform polymorphic processing.',
+            q: 'Can a pointer of type Base* point to an instance of Derived? (yes/no)',
+            ans: 'yes',
+            hints: ['Polymorphic upcasting is valid.', 'Core mechanism of polymorphism.', '3 letters: yes']
+          },
+          {
+            conceptTitle: 'Safe Runtime Downcasting',
+            conceptSyntax: 'Unit* u = acquireTarget();\nBoss* b = dynamic______<Boss*>(u);',
+            conceptDesc: 'To safely convert a base pointer down to its derived class, this cast inspects runtime type information and returns nullptr on failure.',
+            q: 'What cast safely checks and downcasts polymorphic pointers at runtime: dynamic_...?',
+            ans: 'cast',
+            hints: ['dynamic_cast', 'Returns nullptr if types mismatch.', '4 letters: cast']
+          }
+        ]
+      },
+      '3_4': {
+        topic: 'Polymorphism & Abstraction',
+        drills: [
+          {
+            conceptTitle: 'Pure Virtual Method Signatures',
+            conceptSyntax: 'class Instrument {\n  virtual void playSound() = _____; // Pure virtual specification\n};',
+            conceptDesc: 'To specify an interface requirement with no default implementation, assign this value to the virtual function declaration.',
+            q: 'What suffix appended to virtual functions marks them as pure virtual: = ...?',
+            ans: '0',
+            hints: ['Syntax: virtual void f() = 0;', 'Denotes pure virtual function.', 'Single digit: 0']
+          },
+          {
+            conceptTitle: 'Uninstantiable Interface Classes',
+            conceptSyntax: 'class Weapon {\n  virtual void slash() = 0;\n}; // What type of class is this?',
+            conceptDesc: 'A class possessing at least one pure virtual function cannot be instantiated directly and serves as a contract for derived classes.',
+            q: 'A class containing at least one pure virtual function is called what type of class?',
+            ans: 'abstract',
+            hints: ['Abstract base class.', 'Cannot create direct objects.', '8 letters starting with a.']
+          },
+          {
+            conceptTitle: 'Instantiating Pure Interfaces',
+            conceptSyntax: '// Weapon w; // Attempting to instantiate an abstract interface',
+            conceptDesc: 'Because abstract classes contain incomplete method contracts, attempting to declare a direct object instance causes a compilation failure.',
+            q: 'Can you instantiate an object directly from an abstract class? (yes/no)',
+            ans: 'no',
+            hints: ['Only concrete derived classes can instantiate.', 'Abstract classes are interfaces only.', '2 letters: no']
+          },
+          {
+            conceptTitle: 'Dynamic Method Dispatch Tables',
+            conceptSyntax: 'Object -> vptr -> v_____ [ &methodA, &methodB ]',
+            conceptDesc: 'To dispatch virtual function calls at runtime, the compiler constructs this lookup table containing function pointers for each class.',
+            q: 'What internal table structure does compiler build to dispatch virtual functions: v...?',
+            ans: 'table',
+            hints: ['Virtual method table.', 'vtable.', '5 letters: table']
+          },
+          {
+            conceptTitle: 'Per-Object Vtable Pointers',
+            conceptSyntax: 'sizeof(PolymorphicObject) includes hidden pointer to vtable',
+            conceptDesc: 'Every instance of a polymorphic class contains a hidden pointer that references its corresponding vtable to resolve dynamic calls.',
+            q: 'What hidden pointer inside polymorphic objects points to the class vtable: v...?',
+            ans: 'ptr',
+            hints: ['vptr (virtual pointer).', 'Points to vtable.', '3 letters: ptr']
+          },
+          {
+            conceptTitle: 'Polymorphic Binding Moments',
+            conceptSyntax: 'Base* p = getRandomObject();\np->perform(); // Resolved dynamically',
+            conceptDesc: 'While non-virtual function calls are bound at compile-time (early binding), virtual function calls are resolved dynamically at execution time.',
+            q: 'Does virtual method polymorphism resolve at compile-time or runtime?',
+            ans: 'runtime',
+            hints: ['Dynamic late binding.', 'Resolved while program is running.', '7 letters: runtime']
+          },
+          {
+            conceptTitle: 'Inspecting Runtime Descriptors',
+            conceptSyntax: '#include <typeinfo>\nstd::cout << type_____(myObject).name();',
+            conceptDesc: 'This operator queries the dynamic type of an expression at runtime and returns a std::type_info object describing the actual type.',
+            q: 'What operator returns type information of an object at runtime: type...?',
+            ans: 'id',
+            hints: ['typeid operator.', 'Requires <typeinfo> header.', '2 letters: id']
+          },
+          {
+            conceptTitle: 'Handling Downcast Failures',
+            conceptSyntax: 'Warrior* w = dynamic_cast<Warrior*>(genericUnit);\n// If genericUnit was actually a Mage, what is w?',
+            conceptDesc: 'When dynamic_cast fails on pointer types because the underlying object does not match the target type, it safely returns this value.',
+            q: 'What does dynamic_cast return if it fails on a pointer type?',
+            ans: 'nullptr',
+            hints: ['Null pointer literal.', 'Safe failure indicator.', '7 letters: nullptr']
+          },
+          {
+            conceptTitle: 'Uniform Interface Operations',
+            conceptSyntax: 'for (Drawable* item : canvasItems) {\n  item->draw(); // Handles Circles, Rectangles, Text uniformly\n}',
+            conceptDesc: 'The ability to invoke the same interface call across different derived objects and have each execute its specialized logic is called this.',
+            q: 'The capability of different classes to respond uniquely to the same method call is...?',
+            ans: 'polymorphism',
+            hints: ['From Greek meaning "many forms".', 'Core pillar of OOP.', '12 letters starting with p.']
+          },
+          {
+            conceptTitle: 'Interface Contract Isolation',
+            conceptSyntax: 'databaseEngine.connect(); // Caller does not know internal networking wire format',
+            conceptDesc: 'Hiding internal execution complexity and revealing only clean interface contracts to outside callers exemplifies this design principle.',
+            q: 'Hiding internal execution complexity and revealing only interface contracts is...?',
+            ans: 'abstraction',
+            hints: ['Focuses on what rather than how.', 'Essential OOP concept.', '11 letters starting with a.']
+          }
+        ]
+      },
+      '4_1': {
+        topic: 'Vectors & Buffers',
+        drills: [
+          {
+            conceptTitle: 'Dynamic Vector Headers',
+            conceptSyntax: '#include <_____>\nstd::vector<int> numbers;',
+            conceptDesc: 'To use the dynamically resizable contiguous array container provided by the STL, this standard header must be included.',
+            q: 'What standard library header must be included to use std::vector?',
+            ans: 'vector',
+            hints: ['#include <vector>', 'Standard dynamic array header.', '6 letters: vector']
+          },
+          {
+            conceptTitle: 'Appending Vector Elements',
+            conceptSyntax: 'std::vector<int> data;\ndata._____(42); // Appends 42 to the rear',
+            conceptDesc: 'This member function appends a new element to the back end of the vector, automatically reallocating buffer capacity if full.',
+            q: 'What method appends an element to the back end of a std::vector?',
+            ans: 'push_back',
+            hints: ['Pushes to the back.', 'Method name: push_back.', '9 characters: push_back']
+          },
+          {
+            conceptTitle: 'Removing Terminal Elements',
+            conceptSyntax: 'data._____(); // Discards the last element',
+            conceptDesc: 'This member function removes the very last element of a vector in constant O(1) time without returning the removed element.',
+            q: 'What member method removes the very last element of a vector?',
+            ans: 'pop_back',
+            hints: ['Pops from the back.', 'Decrements size by 1.', '8 characters: pop_back']
+          },
+          {
+            conceptTitle: 'Querying Active Item Counts',
+            conceptSyntax: 'size_t activeCount = data._____();',
+            conceptDesc: 'To check how many elements are currently stored inside an STL container, call this standard member method.',
+            q: 'What method returns the number of active elements in an STL container?',
+            ans: 'size',
+            hints: ['Returns current element count.', 'Standard across all STL containers.', '4 letters: size']
+          },
+          {
+            conceptTitle: 'Allocated vs Active Elements',
+            conceptSyntax: 'size_t currentCapacity = data._____(); // Memory allocated before reallocation',
+            conceptDesc: 'While size() counts active elements, this method queries the total elements the pre-allocated memory buffer can hold before growing.',
+            q: 'What method returns total allocated storage elements before reallocation: .capacity()?',
+            ans: 'capacity',
+            hints: ['Measures buffer allocation limit.', 'Always >= size().', '8 letters starting with c.']
+          },
+          {
+            conceptTitle: 'Pre-Allocating Capacity',
+            conceptSyntax: 'data._____(1000); // Allocates capacity for 1000 items upfront',
+            conceptDesc: 'To prevent repeated reallocations and copies when adding thousands of elements, this method pre-allocates buffer capacity in advance.',
+            q: 'What method pre-allocates buffer memory to prevent repeated reallocations?',
+            ans: 'reserve',
+            hints: ['Pre-allocates memory capacity.', 'Does not change size().', '7 letters starting with r.']
+          },
+          {
+            conceptTitle: 'Flushing All Elements',
+            conceptSyntax: 'data._____(); // size becomes 0, capacity remains allocated',
+            conceptDesc: 'This method destroys all elements within the vector container, resetting its size to zero while leaving its allocated capacity intact.',
+            q: 'What method removes all elements from vector setting size to 0: .clear()?',
+            ans: 'clear',
+            hints: ['Empties the container.', 'Resets size to zero.', '5 letters: clear']
+          },
+          {
+            conceptTitle: 'Contiguous Physical Layout',
+            conceptSyntax: 'int* rawArray = data.data(); // Direct memory pointer',
+            conceptDesc: 'Like raw C-style arrays, std::vector guarantees that all its elements are arranged contiguously in physical RAM.',
+            q: 'Does std::vector guarantee contiguous memory storage in RAM? (yes/no)',
+            ans: 'yes',
+            hints: ['Contiguous memory is guaranteed.', 'Compatible with C pointer APIs.', '3 letters: yes']
+          },
+          {
+            conceptTitle: 'Accessing Raw Pointers',
+            conceptSyntax: 'int* ptr = data._____();\nstd::qsort(ptr, data.size(), sizeof(int), cmp);',
+            conceptDesc: 'When interfacing with legacy C libraries requiring raw pointer arrays, this method retrieves a direct pointer to the internal buffer.',
+            q: 'What method returns raw pointer to internal vector array buffer: .data()?',
+            ans: 'data',
+            hints: ['Direct pointer access.', 'Returns pointer to element 0.', '4 letters: data']
+          },
+          {
+            conceptTitle: 'Testing for Emptiness',
+            conceptSyntax: 'if (data._____()) {\n  std::cout << "Buffer holds no elements";\n}',
+            conceptDesc: 'This boolean member method queries whether the container has zero elements, preferred over comparing "size() == 0".',
+            q: 'What method checks if container size is equal to zero: .empty()?',
+            ans: 'empty',
+            hints: ['Returns true if size == 0.', 'Preferred emptiness check.', '5 letters: empty']
+          }
+        ]
+      },
+      '4_2': {
+        topic: 'Associative Maps & Sets',
+        drills: [
+          {
+            conceptTitle: 'Key-Value Mapping Header',
+            conceptSyntax: '#include <_____>\nstd::map<std::string, int> leaderboard;',
+            conceptDesc: 'Associating sorted unique keys with corresponding values requires including this standard associative container header.',
+            q: 'What header must be included to use std::map?',
+            ans: 'map',
+            hints: ['#include <map>', 'Associative key-value container.', '3 letters: map']
+          },
+          {
+            conceptTitle: 'Unique Set Header',
+            conceptSyntax: '#include <_____>\nstd::set<int> uniquePlayerIds;',
+            conceptDesc: 'Storing distinct sorted elements where duplicate entries are automatically rejected requires this standard header.',
+            q: 'What header must be included to use std::set?',
+            ans: 'set',
+            hints: ['#include <set>', 'Unique element collection.', '3 letters: set']
+          },
+          {
+            conceptTitle: 'Underlying Tree Architecture',
+            conceptSyntax: 'std::map items are stored in a self-balancing Red-_____ tree',
+            conceptDesc: 'Standard std::map and std::set containers maintain sorted logarithmic ordering using self-balancing binary search trees.',
+            q: 'What color completes the balanced search tree name used by std::map: red-... tree?',
+            ans: 'black',
+            hints: ['Red-Black tree.', 'Balanced BST structure.', '5 letters: black']
+          },
+          {
+            conceptTitle: 'Constant-Time Hash Maps',
+            conceptSyntax: '#include <unordered_map>\nstd::unordered______<std::string, int> fastLookup;',
+            conceptDesc: 'When sorted ordering is unnecessary and average O(1) constant-time lookup is required, this hash-table container is used.',
+            q: 'What hash-table based map provides O(1) average lookup time: unordered_...?',
+            ans: 'map',
+            hints: ['std::unordered_map', 'Hash-table based lookup.', '3 letters: map']
+          },
+          {
+            conceptTitle: 'Set Duplicate Prevention',
+            conceptSyntax: 'std::set<int> ids;\nids.insert(10);\nids.insert(10); // Does the duplicate get added?',
+            conceptDesc: 'By definition, every key in a standard std::set must be strictly unique. Attempting to insert a duplicate key is safely ignored.',
+            q: 'Does std::set permit duplicate elements to be stored? (yes/no)',
+            ans: 'no',
+            hints: ['Rejects duplicate insertions.', 'Use multiset if duplicates needed.', '2 letters: no']
+          },
+          {
+            conceptTitle: 'Map Key Insertion Operator',
+            conceptSyntax: 'std::map<std::string, int> inventory;\ninventory_____\"potion\"_____ = 5; // Creates key if not present',
+            conceptDesc: 'Using this bracket operator to look up a key will automatically insert that key with a default value if it did not previously exist.',
+            q: 'What map bracket operator creates an entry if the key does not already exist: [ ]?',
+            ans: '[]',
+            hints: ['Subscript brackets.', 'Inserts default value if missing.', '2 characters: []']
+          },
+          {
+            conceptTitle: 'Non-Mutating Key Searches',
+            conceptSyntax: 'auto it = inventory._____("shield");\nif (it != inventory.end()) { /* found */ }',
+            conceptDesc: 'Unlike brackets, this member method searches for a key without inserting default entries, returning end() if the key is absent.',
+            q: 'What map method finds a key without inserting default value: .find()?',
+            ans: 'find',
+            hints: ['Returns iterator to item or end().', 'Safe read-only search.', '4 letters: find']
+          },
+          {
+            conceptTitle: 'Removing Specific Keys',
+            conceptSyntax: 'inventory._____("oldSword"); // Deletes entry from map',
+            conceptDesc: 'To remove an element matching a given key or iterator location from a map or set, invoke this member function.',
+            q: 'What method removes an entry from a map or set: .erase()?',
+            ans: 'erase',
+            hints: ['Deletes element from container.', 'Removes by key or iterator.', '5 letters starting with e.']
+          },
+          {
+            conceptTitle: 'Inspecting Pair Key Fields',
+            conceptSyntax: 'std::pair<std::string, int> entry = {"Ninja", 100};\nstd::string key = entry._____;',
+            conceptDesc: 'Map iterators dereference to std::pair objects. The first member holds the key, while the second member holds the associated value.',
+            q: 'What field name accesses the key in std::pair: p....?',
+            ans: 'first',
+            hints: ['Holds the key in std::pair.', 'Opposite of second.', '5 letters: first']
+          },
+          {
+            conceptTitle: 'Logarithmic Complexity Scaling',
+            conceptSyntax: 'Tree height scales logarithmically with element count N',
+            conceptDesc: 'Because std::map maintains balanced tree depth, search, insertion, and deletion operate in O(log N) time.',
+            q: 'What letter completes search time complexity for std::map: O(log ...) ?',
+            ans: 'n',
+            hints: ['O(log N)', 'Scales with element count.', 'Single letter: n']
+          }
+        ]
+      },
+      '4_3': {
+        topic: 'Stacks & Queues',
+        drills: [
+          {
+            conceptTitle: 'LIFO Structure Ordering',
+            conceptSyntax: 'stack.push(1); stack.push(2);\nstack.top(); // Returns 2',
+            conceptDesc: 'A stack operates under Last-In, First-Out (LIFO). The most recently added item is the first one retrieved and removed.',
+            q: 'What processing order does std::stack follow? (LIFO or FIFO)',
+            ans: 'lifo',
+            hints: ['Last-In, First-Out.', 'Think of a stack of plates.', '4 letters: lifo']
+          },
+          {
+            conceptTitle: 'FIFO Structure Ordering',
+            conceptSyntax: 'queue.push(1); queue.push(2);\nqueue.front(); // Returns 1',
+            conceptDesc: 'A queue operates under First-In, First-Out (FIFO). Items are processed in the strict sequential order they arrived.',
+            q: 'What processing order does std::queue follow? (LIFO or FIFO)',
+            ans: 'fifo',
+            hints: ['First-In, First-Out.', 'Think of a line at a store.', '4 letters: fifo']
+          },
+          {
+            conceptTitle: 'Stack Container Header',
+            conceptSyntax: '#include <_____>\nstd::stack<int> undoHistory;',
+            conceptDesc: 'To use the LIFO stack container adapter in your program, include this standard header.',
+            q: 'What header must be included to use std::stack?',
+            ans: 'stack',
+            hints: ['#include <stack>', 'LIFO container adapter.', '5 letters: stack']
+          },
+          {
+            conceptTitle: 'Queue Container Header',
+            conceptSyntax: '#include <_____>\nstd::queue<Task> printQueue;',
+            conceptDesc: 'To use the FIFO queue container adapter in your program, include this standard header.',
+            q: 'What header must be included to use std::queue?',
+            ans: 'queue',
+            hints: ['#include <queue>', 'FIFO container adapter.', '5 letters: queue']
+          },
+          {
+            conceptTitle: 'Inserting Onto Stack Tops',
+            conceptSyntax: 'undoHistory._____(actionState);',
+            conceptDesc: 'This member function pushes a new element onto the top of a stack or into the back of a queue.',
+            q: 'What method pushes an element onto the top of a stack: .push()?',
+            ans: 'push',
+            hints: ['Pushes element into container.', 'Complement to pop().', '4 letters: push']
+          },
+          {
+            conceptTitle: 'Inspecting Stack Tops',
+            conceptSyntax: 'int currentAction = undoHistory._____(); // Reads without removing',
+            conceptDesc: 'In a stack, this member method reads and accesses the most recently pushed element without popping it off.',
+            q: 'What method accesses the top element of a stack without removing it?',
+            ans: 'top',
+            hints: ['Accesses the uppermost element.', 'Does not remove the item.', '3 letters: top']
+          },
+          {
+            conceptTitle: 'Discarding Top Elements',
+            conceptSyntax: 'undoHistory._____(); // Discards the top element',
+            conceptDesc: 'This member function removes the current active element from a stack or queue without returning its value.',
+            q: 'What method removes the top element of a stack?',
+            ans: 'pop',
+            hints: ['Removes the active element.', 'Complement to push().', '3 letters: pop']
+          },
+          {
+            conceptTitle: 'Reading Queue Fronts',
+            conceptSyntax: 'Task nextTask = taskQueue._____();',
+            conceptDesc: 'In a queue, this member method inspects the oldest element waiting at the front of the line without dequeuing it.',
+            q: 'What method accesses the next item in line at front of a queue: .front()?',
+            ans: 'front',
+            hints: ['First item in line.', 'Opposite of back().', '5 letters: front']
+          },
+          {
+            conceptTitle: 'Double-Ended Queues',
+            conceptSyntax: '#include <_____>\nstd::deque<int> buffer;\nbuffer.push_front(1); buffer.push_back(2);',
+            conceptDesc: 'This sequence container allows fast constant O(1) insertions and removals at both its beginning and its end.',
+            q: 'What double-ended queue container allows fast push and pop on both ends?',
+            ans: 'deque',
+            hints: ['std::deque', 'Double-ended queue.', '5 letters: deque']
+          },
+          {
+            conceptTitle: 'Max-Heap Priority Adapters',
+            conceptSyntax: '#include <queue>\nstd::priority______<int> maxHeap;',
+            conceptDesc: 'This container adapter organizes elements such that the highest priority or largest element is always positioned at the top.',
+            q: 'What container adapter maintains largest element at top: priority_...?',
+            ans: 'queue',
+            hints: ['std::priority_queue', 'Heap-based ordering.', '5 letters: queue']
+          }
+        ]
+      },
+      '4_4': {
+        topic: 'STL Algorithms & Iterators',
+        drills: [
+          {
+            conceptTitle: 'Algorithm Library Header',
+            conceptSyntax: '#include <_____>\nstd::sort(v.begin(), v.end());',
+            conceptDesc: 'Standard algorithms operating on iterator ranges (like sort, find, reverse) are provided in this header.',
+            q: 'What header provides standard algorithms like sort, find, and reverse?',
+            ans: 'algorithm',
+            hints: ['#include <algorithm>', 'Generic operations library.', '9 letters: algorithm']
+          },
+          {
+            conceptTitle: 'Sorting Iterator Ranges',
+            conceptSyntax: 'std::_____(data.begin(), data.end());',
+            conceptDesc: 'This algorithm reorders elements between an iterator range [begin, end) into non-descending order in O(N log N) time.',
+            q: 'What standard algorithm sorts a range in non-descending order?',
+            ans: 'sort',
+            hints: ['std::sort', 'Reorders into ascending order.', '4 letters: sort']
+          },
+          {
+            conceptTitle: 'Linear Value Searches',
+            conceptSyntax: 'auto it = std::_____(data.begin(), data.end(), 42);',
+            conceptDesc: 'This algorithm inspects an iterator range sequentially and returns an iterator to the first element matching the search value.',
+            q: 'What algorithm searches linearly for a value matching a target: std::...?',
+            ans: 'find',
+            hints: ['std::find', 'Returns iterator or end().', '4 letters: find']
+          },
+          {
+            conceptTitle: 'Counting Matching Items',
+            conceptSyntax: 'int occurrences = std::_____(data.begin(), data.end(), 7);',
+            conceptDesc: 'This algorithm counts and returns the total number of elements in an iterator range that equal a given target value.',
+            q: 'What algorithm counts how many elements equal a specific value: std::...?',
+            ans: 'count',
+            hints: ['std::count', 'Counts matching instances.', '5 letters: count']
+          },
+          {
+            conceptTitle: 'Inverting Sequence Order',
+            conceptSyntax: 'std::_____(data.begin(), data.end());',
+            conceptDesc: 'This algorithm reverses the order of elements in an iterator range in place so the last becomes first.',
+            q: 'What algorithm reverses the order of elements in a range?',
+            ans: 'reverse',
+            hints: ['std::reverse', 'Inverts sequence order.', '7 letters starting with r.']
+          },
+          {
+            conceptTitle: 'Logarithmic Binary Searches',
+            conceptSyntax: 'bool exists = std::binary______(sortedData.begin(), sortedData.end(), 20);',
+            conceptDesc: 'On pre-sorted ranges, this algorithm performs binary search in O(log N) time, returning true if the target element exists.',
+            q: 'What algorithm performs fast O(log N) lookup on sorted ranges: binary_...?',
+            ans: 'search',
+            hints: ['std::binary_search', 'Requires pre-sorted collection.', '6 letters: search']
+          },
+          {
+            conceptTitle: 'Beginning Iterator Positions',
+            conceptSyntax: 'auto startIterator = container._____();',
+            conceptDesc: 'This member method returns an iterator pointing to the very first element of an STL container to begin traversal.',
+            q: 'What method returns an iterator to the beginning of a container: c....()?',
+            ans: 'begin',
+            hints: ['Points to element 0.', 'Pair to end().', '5 letters: begin']
+          },
+          {
+            conceptTitle: 'Past-The-End Sentinel Iterators',
+            conceptSyntax: 'auto pastLastIterator = container._____();',
+            conceptDesc: 'This member method returns a sentinel iterator pointing PAST the final element, signaling termination of traversal.',
+            q: 'What method returns a past-the-end sentinel iterator: c....()?',
+            ans: 'end',
+            hints: ['Signals completion of range.', 'Pair to begin().', '3 letters: end']
+          },
+          {
+            conceptTitle: 'Iterator Value Indirection',
+            conceptSyntax: 'auto it = data.begin();\nint val = _____it; // Dereferencing iterator',
+            conceptDesc: 'Iterators mimic raw pointers. Prepending this operator dereferences the iterator to access or modify the underlying element.',
+            q: 'What operator dereferences an iterator to access the element it points to: ...it?',
+            ans: '*',
+            hints: ['Asterisk indirection.', 'Same as pointer dereference.', '1 character: *']
+          },
+          {
+            conceptTitle: 'Advancing Iterator Positions',
+            conceptSyntax: '_____it; // Advances iterator to next element',
+            conceptDesc: 'This operator advances an iterator forward to point to the subsequent element in the sequence.',
+            q: 'What operator advances an iterator to the next position: ...it?',
+            ans: '++',
+            hints: ['Unary increment operator.', 'Advances forward.', '2 characters: ++']
+          }
+        ]
+      }
+    };
+
+    // ============================================================================
+    // 2. MENU, SPLIT-SCREEN DECK & QUIZ UI LOGIC
+    // ============================================================================
+    // Directing links for the Mission Select Header Link button (replace '#' with your target URL)
+    const LEVEL_DIRECT_LINKS = {
+      '1_1': '#',
+      '1_2': '#',
+      '1_3': '#',
+      '1_4': '#',
+      '2_1': '#',
+      '2_2': '#',
+      '2_3': '#',
+      '2_4': '#',
+      '3_1': '#',
+      '3_2': '#',
+      '3_3': '#',
+      '3_4': '#',
+      '4_1': '#',
+      '4_2': '#',
+      '4_3': '#',
+      '4_4': '#'
+    };
+
+    const stagesConfig = [
+      {
+        stageId: '1',
+        stageName: 'Stage 1: Basics & Control Flow',
+        levels: [
+          { id: '1_1', name: 'LEVEL 1', pair: 'Variables & Data Types', enemies: 10, link: LEVEL_DIRECT_LINKS['1_1'] },
+          { id: '1_2', name: 'LEVEL 2', pair: 'Operators & Conditions', enemies: 10, link: LEVEL_DIRECT_LINKS['1_2'] },
+          { id: '1_3', name: 'LEVEL 3', pair: 'Loops & Flow Controls', enemies: 10, link: LEVEL_DIRECT_LINKS['1_3'] },
+          { id: '1_4', name: 'LEVEL 4', pair: 'Functions & Scope', enemies: 10, link: LEVEL_DIRECT_LINKS['1_4'] }
+        ]
+      },
+      {
+        stageId: '2',
+        stageName: 'Stage 2: Arrays & Memory',
+        levels: [
+          { id: '2_1', name: 'LEVEL 1', pair: 'Fixed Arrays & Subscript', enemies: 10, link: LEVEL_DIRECT_LINKS['2_1'] },
+          { id: '2_2', name: 'LEVEL 2', pair: 'C++ Strings & Stream I/O', enemies: 10, link: LEVEL_DIRECT_LINKS['2_2'] },
+          { id: '2_3', name: 'LEVEL 3', pair: 'Pointers & Address Logic', enemies: 10, link: LEVEL_DIRECT_LINKS['2_3'] },
+          { id: '2_4', name: 'LEVEL 4', pair: 'References & Dynamic Heap', enemies: 10, link: LEVEL_DIRECT_LINKS['2_4'] }
+        ]
+      },
+      {
+        stageId: '3',
+        stageName: 'Stage 3: Object-Oriented C++',
+        levels: [
+          { id: '3_1', name: 'LEVEL 1', pair: 'Classes & Encapsulation', enemies: 10, link: LEVEL_DIRECT_LINKS['3_1'] },
+          { id: '3_2', name: 'LEVEL 2', pair: 'Constructors & Destructors', enemies: 10, link: LEVEL_DIRECT_LINKS['3_2'] },
+          { id: '3_3', name: 'LEVEL 3', pair: 'Inheritance & Overriding', enemies: 10, link: LEVEL_DIRECT_LINKS['3_3'] },
+          { id: '3_4', name: 'LEVEL 4', pair: 'Polymorphism & Abstraction', enemies: 10, link: LEVEL_DIRECT_LINKS['3_4'] }
+        ]
+      },
+      {
+        stageId: '4',
+        stageName: 'Stage 4: Standard Template Library',
+        levels: [
+          { id: '4_1', name: 'LEVEL 1', pair: 'Vectors & Buffers', enemies: 10, link: LEVEL_DIRECT_LINKS['4_1'] },
+          { id: '4_2', name: 'LEVEL 2', pair: 'Associative Maps & Sets', enemies: 10, link: LEVEL_DIRECT_LINKS['4_2'] },
+          { id: '4_3', name: 'LEVEL 3', pair: 'Stacks & Queues', enemies: 10, link: LEVEL_DIRECT_LINKS['4_3'] },
+          { id: '4_4', name: 'LEVEL 4', pair: 'STL Algorithms & Iterators', enemies: 10, link: LEVEL_DIRECT_LINKS['4_4'] }
+        ]
+      }
+    ];
+
+    const ALL_LEVEL_IDS = [];
+    stagesConfig.forEach(st => st.levels.forEach(lvl => ALL_LEVEL_IDS.push(lvl.id)));
+    let chosenLevel = '1_1';
+    let isPlayingAudio = false;
+
+    function isLevelUnlocked(lvlId) {
+      if (lvlId === '1_1') return true;
+      const idx = ALL_LEVEL_IDS.indexOf(lvlId);
+      if (idx <= 0) return true;
+      const prevLvlId = ALL_LEVEL_IDS[idx - 1];
+      const clearedStages = JSON.parse(localStorage.getItem('shinobi_stars_v2') || '{}');
+      return (clearedStages[prevLvlId] || 0) >= 10;
+    }
+
+    function calculateStageScore(stage) {
+      const clearedStages = JSON.parse(localStorage.getItem('shinobi_stars_v2') || '{}');
+      let earned = 0, total = 0;
+      stage.levels.forEach(lvl => {
+        earned += Math.min(lvl.enemies, (clearedStages[lvl.id] || 0));
+        total += lvl.enemies;
+      });
+      return { earned, total };
+    }
+
+    window.renderStageList = function() {
+      const container = document.getElementById('stageList');
+      if (!container) return;
+      const clearedStages = JSON.parse(localStorage.getItem('shinobi_stars_v2') || '{}');
+
+      // Keep the single header LINK button synchronized with the selected level
+      const headerLinkBtn = document.getElementById('headerLinkBtn');
+      if (headerLinkBtn) {
+        headerLinkBtn.href = LEVEL_DIRECT_LINKS[chosenLevel] || '#';
+      }
+
+      container.innerHTML = stagesConfig.map(st => {
+        const stageScore = calculateStageScore(st);
+        const levelsHTML = st.levels.map(lvl => {
+          const unlocked = isLevelUnlocked(lvl.id);
+          const starsEarned = Math.min(lvl.enemies, (clearedStages[lvl.id] || 0));
+          const lockClass = unlocked ? '' : 'locked';
+          const badgeHTML = unlocked ? `⭐ ${starsEarned}/${lvl.enemies}` : `🔒 LOCKED`;
+          const reattemptHTML = (unlocked && starsEarned > 0)
+            ? `<button class="reattempt-btn" title="Reattempt this level" onclick="reattemptLevel('${lvl.id}', event)">↻</button>`
+            : '';
+
+          return `
+            <div class="lvl-btn-row">
+              <button class="lvl-btn ${lockClass} ${lvl.id === chosenLevel ? 'active' : ''}" onclick="selectLevel('${lvl.id}')">
+                <div class="stage-info">
+                  <div>${lvl.name}</div>
+                  <span>${lvl.pair}</span>
+                </div>
+                <div class="star-tag">${badgeHTML}</div>
+              </button>
+              ${reattemptHTML}
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="stage-group">
+            <div class="stage-header-title">
+              <span>${st.stageName}</span>
+              <span style="color:#fbbf24;">★ ${stageScore.earned}/${stageScore.total}</span>
+            </div>
+            <div class="stage-levels-col">${levelsHTML}</div>
+          </div>
+        `;
+      }).join('');
+    };
+
+    window.selectLevel = function(lvl) {
+      if (!isLevelUnlocked(lvl)) return;
+      chosenLevel = lvl;
+      window.renderStageList();
+    };
+
+    window.reattemptLevel = function(lvl, evt) {
+      if (evt) evt.stopPropagation();
+      chosenLevel = lvl;
+      window.renderStageList();
+      window.startGame();
+    };
+
+    window.toggleStageDrawer = function() {
+      const leftPanel = document.getElementById('leftPanel');
+      const missionWrapper = document.getElementById('missionModulesWrapper');
+      if (leftPanel.classList.contains('hidden')) {
+        window.renderStageList();
+        leftPanel.classList.remove('hidden');
+        missionWrapper.style.display = 'none';
+      } else if (window.ninja3D && window.ninja3D.isGameStarted) {
+        leftPanel.classList.add('hidden');
+        missionWrapper.style.display = 'flex';
+      }
+    };
+
+    window.toggleAudio = function() {
+      const bgMusic = document.getElementById('bgMusic');
+      const soundLabel = document.getElementById('soundLabel');
+      const eqBars = document.getElementById('eqBars');
+      if (!bgMusic) return;
+
+      if (!isPlayingAudio) {
+        bgMusic.play().then(() => {
+          isPlayingAudio = true;
+          soundLabel.innerText = 'Audio On';
+          eqBars.classList.remove('eq-paused');
+        }).catch(() => {});
+      } else {
+        bgMusic.pause();
+        isPlayingAudio = false;
+        soundLabel.innerText = 'Audio Off';
+        eqBars.classList.add('eq-paused');
+      }
+    };
+
+    window.startGame = function() {
+      if (!isLevelUnlocked(chosenLevel)) return;
+      if (!isPlayingAudio) window.toggleAudio();
+      document.getElementById('leftPanel').classList.add('hidden');
+      document.getElementById('endModal').classList.remove('active');
+      document.getElementById('missionModulesWrapper').style.display = 'flex';
+      if (window.ninja3D) window.ninja3D.startLevel(chosenLevel);
+    };
+
+    window.retryCurrentLevel = function() {
+      document.getElementById('endModal').classList.remove('active');
+      document.getElementById('leftPanel').classList.add('hidden');
+      document.getElementById('missionModulesWrapper').style.display = 'flex';
+      if (window.ninja3D) window.ninja3D.startLevel(chosenLevel);
+    };
+
+    window.returnToMenu = function() {
+      document.getElementById('endModal').classList.remove('active');
+      document.getElementById('missionModulesWrapper').style.display = 'none';
+      window.renderStageList();
+      document.getElementById('leftPanel').classList.remove('hidden');
+      if (window.ninja3D) window.ninja3D.isGameStarted = false;
+      document.getElementById('arenaPhaseTag').innerText = '3D ARENA • MENU ORBIT';
+    };
+
+    window.triggerImmediateCombat = function() {
+      if (window.ninja3D) window.ninja3D.transitionToCombat();
+    };
+
+    window.cycleCameraMode = function() {
+      if (window.ninja3D) window.ninja3D.cycleCamera();
+    };
+
+    // Quiz / Answering Module State (Mutually Exclusive with Learning Module)
+    let quizInterval = null;
+    let quizSecondsLeft = 30;
+    let currentQuizItem = null;
+    let revealedHintsIndices = new Set();
+
+    window.showLearningModuleOnly = function() {
+      clearInterval(quizInterval);
+      currentQuizItem = null;
+      const quizCard = document.getElementById('quizOverlay');
+      const wisdomCard = document.getElementById('wisdomBanner');
+
+      // Hide Answering Card completely & show Learning Card full-space
+      quizCard.style.display = 'none';
+      wisdomCard.style.display = 'flex';
+      wisdomCard.classList.add('active-focus');
+
+      const input = document.getElementById('answerInput');
+      const btn = document.getElementById('submitBtn');
+      if (input) {
+        input.value = '';
+        input.disabled = true;
+      }
+      if (btn) btn.disabled = true;
+    };
+
+    window.openQuizModal = function(qData) {
+      currentQuizItem = qData;
+      quizSecondsLeft = 30;
+      revealedHintsIndices.clear();
+
+      const quizCard = document.getElementById('quizOverlay');
+      const wisdomCard = document.getElementById('wisdomBanner');
+
+      // Hide Learning Card completely & show Answering Card full-space
+      wisdomCard.style.display = 'none';
+      quizCard.style.display = 'flex';
+      quizCard.classList.remove('standby-mode');
+      quizCard.classList.add('combat-focus');
+
+      document.getElementById('quizTopic').innerText = qData.topic || 'C++ COMBAT CLASH';
+      document.getElementById('quizQuestion').innerText = qData.q;
+      document.getElementById('quizTimer').innerText = `${quizSecondsLeft}s`;
+
+      const input = document.getElementById('answerInput');
+      const btn = document.getElementById('submitBtn');
+      input.disabled = false;
+      btn.disabled = false;
+      input.value = '';
+
+      updateHintsUI();
+      setTimeout(() => input.focus(), 50);
+
+      clearInterval(quizInterval);
+      quizInterval = setInterval(() => {
+        quizSecondsLeft--;
+        document.getElementById('quizTimer').innerText = `${quizSecondsLeft}s`;
+        updateHintsUI();
+        if (quizSecondsLeft <= 0) {
+          clearInterval(quizInterval);
+          window.submitAnswer(true);
+        }
+      }, 1000);
+    };
+
+    window.manuallyRevealHint = function(index) {
+      revealedHintsIndices.add(index);
+      updateHintsUI();
+    };
+
+    function updateHintsUI() {
+      if (!currentQuizItem) return;
+      const elapsed = 30 - quizSecondsLeft;
+      const hints = currentQuizItem.hints || [];
+      const nextUnlockIn = 10 - (elapsed % 10);
+      document.getElementById('hintCountdown').innerText =
+        elapsed >= (hints.length * 10) ? 'All Intel Revealed' : `Next auto in ${nextUnlockIn}s`;
+
+      const list = document.getElementById('hintsList');
+      list.innerHTML = hints.map((h, i) => {
+        const unlockThreshold = (i + 1) * 10;
+        const isUnlocked = (elapsed >= unlockThreshold) || revealedHintsIndices.has(i);
+        const isFinal = (i === hints.length - 1);
+        if (isUnlocked) {
+          return `
+            <div class="hint-step unlocked ${isFinal ? 'final-hint' : ''}">
+              <span>💡 Intel ${i + 1}: ${h}</span>
+              <span style="color:#38bdf8; font-size:10.5px; font-weight:800;">DECRYPTED</span>
+            </div>
+          `;
+        }
+        return `
+          <div class="hint-step">
+            <span>Intel ${i + 1} Encrypted (Auto in ${Math.max(0, unlockThreshold - elapsed)}s)</span>
+            <button class="reveal-hint-btn" onclick="manuallyRevealHint(${i})">REVEAL</button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.submitAnswer = function(isTimeout = false) {
+      if (!currentQuizItem) return;
+      clearInterval(quizInterval);
+
+      const input = document.getElementById('answerInput');
+      const userAns = input.value.trim().toLowerCase();
+      const correctAns = String(currentQuizItem.ans).trim().toLowerCase();
+      const isCorrect = !isTimeout && (userAns === correctAns);
+
+      input.disabled = true;
+      document.getElementById('submitBtn').disabled = true;
+      input.blur();
+
+      // Hide Answering Module once answered so transition is clean
+      document.getElementById('quizOverlay').style.display = 'none';
+
+      if (window.ninja3D) window.ninja3D.resolveQuizOutcome(isCorrect);
+      currentQuizItem = null;
+    };
+
+    // Enter key inside answerInput triggers submitAnswer()
+    document.addEventListener('DOMContentLoaded', () => {
+      const answerInput = document.getElementById('answerInput');
+      if (answerInput) {
+        answerInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            window.submitAnswer(false);
+          }
+        });
+      }
+    });
+
+    // ============================================================================
+    // 3. PROCEDURAL REALISTIC PBR TEXTURE GENERATORS (STONE, WOOD, WATER, SKY)
+    // ============================================================================
+    function createRealisticStoneTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // Base slate stone color
+      ctx.fillStyle = '#2b303a';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Granular stone noise
+      for (let i = 0; i < 18000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const v = 30 + Math.floor(Math.random() * 45);
+        ctx.fillStyle = `rgb(${v}, ${v + 3}, ${v + 8})`;
+        ctx.fillRect(x, y, 2, 2);
+      }
+
+      // Ashlar stone slab mortar joints
+      ctx.strokeStyle = '#14171d';
+      ctx.lineWidth = 4;
+      const rows = 8;
+      const rowH = 512 / rows;
+      for (let r = 0; r < rows; r++) {
+        const y = r * rowH;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(512, y);
+        ctx.stroke();
+
+        const cols = 4;
+        const colW = 512 / cols;
+        const offset = (r % 2) * (colW / 2);
+        for (let c = 0; c <= cols; c++) {
+          const x = (c * colW + offset) % 512;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x, y + rowH);
+          ctx.stroke();
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(2, 42);
+      return tex;
+    }
+
+    function createRealisticWoodTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#7c1919';
+      ctx.fillRect(0, 0, 256, 256);
+
+      for (let i = 0; i < 400; i++) {
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(40, 5, 5, 0.16)' : 'rgba(165, 38, 30, 0.14)';
+        ctx.fillRect(Math.random() * 256, 0, 1 + Math.random() * 3, 256);
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    function createRealisticSunsetSkyTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      const grad = ctx.createLinearGradient(0, 0, 0, 512);
+      grad.addColorStop(0.0, '#070b16');
+      grad.addColorStop(0.32, '#162238');
+      grad.addColorStop(0.62, '#3b2d4a');
+      grad.addColorStop(0.82, '#8c3f39');
+      grad.addColorStop(0.95, '#d97742');
+      grad.addColorStop(1.0, '#f3a857');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1024, 512);
+
+      // Subtle atmospheric cloud wisps
+      for (let i = 0; i < 45; i++) {
+        const x = Math.random() * 1024;
+        const y = 180 + Math.random() * 240;
+        const w = 90 + Math.random() * 220;
+        const h = 8 + Math.random() * 22;
+        const cGrad = ctx.createRadialGradient(x, y, 2, x, y, w);
+        cGrad.addColorStop(0, 'rgba(255, 190, 130, 0.14)');
+        cGrad.addColorStop(1, 'rgba(255, 190, 130, 0)');
+        ctx.fillStyle = cGrad;
+        ctx.fillRect(x - w, y - h, w * 2, h * 2);
+      }
+
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    // ============================================================================
+    // 4. TRUE 3D ARTICULATED STICKMAN RIG (PRESERVED AS REQUESTED)
+    // ============================================================================
+    class StickmanRig3D {
+      constructor(colorHex = 0x00ffff, isBoss = false) {
+        this.root = new THREE.Group();
+        this.colorHex = colorHex;
+        this.isBoss = isBoss;
+        const scale = isBoss ? 1.45 : 1.0;
+        this.root.scale.set(scale, scale, scale);
+
+        this.bodyMat = new THREE.MeshStandardMaterial({
+          color: 0x08040a,
+          roughness: 0.35,
+          metalness: 0.6
+        });
+
+        this.neonMat = new THREE.MeshStandardMaterial({
+          color: colorHex,
+          emissive: colorHex,
+          emissiveIntensity: 0.85,
+          roughness: 0.2
+        });
+
+        this.whiteCoreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+        // Pelvis / Hips Center
+        this.hips = new THREE.Group();
+        this.hips.position.y = 1.9;
+        this.root.add(this.hips);
+
+        // Torso
+        const torsoMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.13, 1.25, 12), this.bodyMat);
+        torsoMesh.position.y = 0.62;
+        torsoMesh.castShadow = true;
+        this.hips.add(torsoMesh);
+
+        // Glowing Cyber Spine & Chest Ring
+        const chestRing = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.03, 8, 24), this.neonMat);
+        chestRing.position.y = 0.85;
+        chestRing.rotation.x = Math.PI / 2;
+        this.hips.add(chestRing);
+
+        // Head Group
+        this.headGroup = new THREE.Group();
+        this.headGroup.position.y = 1.5;
+        this.hips.add(this.headGroup);
+
+        const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 20), this.bodyMat);
+        headMesh.castShadow = true;
+        this.headGroup.add(headMesh);
+
+        // Glowing Visor / Eyes + Headband
+        const headband = new THREE.Mesh(new THREE.CylinderGeometry(0.355, 0.355, 0.1, 20), this.neonMat);
+        headband.position.y = 0.06;
+        this.headGroup.add(headband);
+
+        // Streaming 3D Headband Scarf Tails
+        this.scarfTail = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.05, 0.9), this.neonMat);
+        this.scarfTail.position.set(0, 0.06, 0.55);
+        this.headGroup.add(this.scarfTail);
+
+        if (isBoss) {
+          // Samurai Horns for Boss Targets
+          const hornGeo = new THREE.ConeGeometry(0.08, 0.45, 8);
+          const leftHorn = new THREE.Mesh(hornGeo, this.neonMat);
+          leftHorn.position.set(-0.22, 0.38, -0.1);
+          leftHorn.rotation.z = 0.4;
+          const rightHorn = new THREE.Mesh(hornGeo, this.neonMat);
+          rightHorn.position.set(0.22, 0.38, -0.1);
+          rightHorn.rotation.z = -0.4;
+          this.headGroup.add(leftHorn, rightHorn);
+        }
+
+        // Build Articulated Arms
+        this.leftArm = this.createLimb(0.08, 0.6, 0.55);
+        this.leftArm.upper.position.set(-0.32, 1.15, 0);
+        this.hips.add(this.leftArm.upper);
+
+        this.rightArm = this.createLimb(0.08, 0.6, 0.55);
+        this.rightArm.upper.position.set(0.32, 1.15, 0);
+        this.hips.add(this.rightArm.upper);
+
+        // Attach 3D Glowing Katana to Right Hand (and Left Hand if Boss)
+        this.katana = this.createKatana();
+        this.katana.position.set(0, -0.55, 0);
+        this.katana.rotation.x = Math.PI / 2;
+        this.rightArm.lower.add(this.katana);
+
+        if (isBoss) {
+          this.offhandKatana = this.createKatana();
+          this.offhandKatana.position.set(0, -0.55, 0);
+          this.offhandKatana.rotation.x = Math.PI / 2;
+          this.leftArm.lower.add(this.offhandKatana);
+        }
+
+        // Build Articulated Legs
+        this.leftLeg = this.createLimb(0.095, 0.85, 0.85);
+        this.leftLeg.upper.position.set(-0.16, 0, 0);
+        this.hips.add(this.leftLeg.upper);
+
+        this.rightLeg = this.createLimb(0.095, 0.85, 0.85);
+        this.rightLeg.upper.position.set(0.16, 0, 0);
+        this.hips.add(this.rightLeg.upper);
+      }
+
+      createLimb(radius, upperLen, lowerLen) {
+        const upper = new THREE.Group();
+        const uMesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius * 0.85, upperLen, 10), this.bodyMat);
+        uMesh.position.y = -upperLen / 2;
+        uMesh.castShadow = true;
+        upper.add(uMesh);
+
+        const jointRing = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.15, 10, 10), this.neonMat);
+        jointRing.position.y = -upperLen;
+        upper.add(jointRing);
+
+        const lower = new THREE.Group();
+        lower.position.y = -upperLen;
+        const lMesh = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.85, radius * 0.7, lowerLen, 10), this.bodyMat);
+        lMesh.position.y = -lowerLen / 2;
+        lMesh.castShadow = true;
+        lower.add(lMesh);
+
+        upper.add(lower);
+        return { upper, lower };
+      }
+
+      createKatana() {
+        const swordGroup = new THREE.Group();
+        // Hilt
+        const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.45, 8), this.bodyMat);
+        swordGroup.add(hilt);
+        // Guard (Tsuba)
+        const guard = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.04, 12), this.neonMat);
+        guard.position.y = 0.22;
+        swordGroup.add(guard);
+        // Glowing Neon Outer Blade
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 2.1, 0.09), this.neonMat);
+        blade.position.y = 1.28;
+        swordGroup.add(blade);
+        // White Hot Core
+        const core = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.05, 0.03), this.whiteCoreMat);
+        core.position.y = 1.28;
+        swordGroup.add(core);
+        return swordGroup;
+      }
+
+      animateSprint(time, jumpProgress = 0, laneTilt = 0) {
+        const t = time * 14;
+        // Headband waves in 3D wind
+        this.scarfTail.rotation.x = 0.25 + Math.sin(time * 22) * 0.25;
+        this.scarfTail.rotation.y = Math.cos(time * 18) * 0.2;
+
+        if (jumpProgress > 0) {
+          // 3D Front-Flip Animation!
+          this.hips.position.y = 1.9 + Math.sin(jumpProgress * Math.PI) * 3.2;
+          this.hips.rotation.x = -jumpProgress * Math.PI * 2;
+          this.leftLeg.upper.rotation.x = 0.8;
+          this.leftLeg.lower.rotation.x = -1.5;
+          this.rightLeg.upper.rotation.x = 0.8;
+          this.rightLeg.lower.rotation.x = -1.5;
+          return;
+        }
+
+        // Standard 3D Ninja Sprint Lean & Bob
+        this.hips.position.y = 1.85 + Math.abs(Math.sin(t)) * 0.25;
+        this.hips.rotation.x = -0.35; // Lean forward into -Z
+        this.hips.rotation.z = laneTilt;
+        this.hips.rotation.y = Math.sin(t) * 0.15;
+
+        // Legs striding along Z
+        this.leftLeg.upper.rotation.x = Math.sin(t) * 1.05;
+        this.leftLeg.lower.rotation.x = -Math.max(0.1, Math.cos(t) * 1.2 + 0.5);
+
+        this.rightLeg.upper.rotation.x = Math.sin(t + Math.PI) * 1.05;
+        this.rightLeg.lower.rotation.x = -Math.max(0.1, Math.cos(t + Math.PI) * 1.2 + 0.5);
+
+        // Left arm pumping, Right arm holding katana swept back in ninja style
+        this.leftArm.upper.rotation.x = Math.sin(t + Math.PI) * 0.9;
+        this.leftArm.lower.rotation.x = 0.7;
+
+        this.rightArm.upper.rotation.x = 0.75 + Math.sin(t) * 0.15;
+        this.rightArm.upper.rotation.z = -0.25;
+        this.rightArm.lower.rotation.x = 0.4;
+      }
+
+      animateClashStance(time, isAttacking = false, slashProgress = 0) {
+        this.hips.rotation.z = 0;
+        if (isAttacking) {
+          // 360 Whirlwind 3D Katana Finisher
+          this.hips.position.y = 2.1 + Math.sin(slashProgress * Math.PI) * 1.6;
+          this.hips.rotation.y = slashProgress * Math.PI * 4;
+          this.hips.rotation.x = -0.2;
+          this.rightArm.upper.rotation.x = -1.2;
+          this.rightArm.upper.rotation.z = -1.1;
+          this.rightArm.lower.rotation.x = 0.2;
+          return;
+        }
+        // Locked blades breathing & pushing against each other
+        const jitter = Math.sin(time * 35) * 0.06;
+        this.hips.position.y = 1.75 + Math.sin(time * 8) * 0.08;
+        this.hips.rotation.x = -0.22 + jitter;
+        this.hips.rotation.y = 0;
+
+        this.leftLeg.upper.rotation.x = 0.45;
+        this.leftLeg.lower.rotation.x = -0.5;
+        this.rightLeg.upper.rotation.x = -0.45;
+        this.rightLeg.lower.rotation.x = -0.35;
+
+        this.rightArm.upper.rotation.x = -1.05 + jitter;
+        this.rightArm.upper.rotation.z = 0.35;
+        this.rightArm.lower.rotation.x = 0.65;
+
+        this.leftArm.upper.rotation.x = -0.8;
+        this.leftArm.lower.rotation.x = 0.8;
+      }
+    }
+
+    // ============================================================================
+    // 5. MAIN 3D ENGINE & REALISTIC ENVIRONMENT CONTROLLER
+    // ============================================================================
+    class ShinobiWorld3D {
+      constructor() {
+        this.container = document.getElementById('webgl-container');
+        this.clock = new THREE.Clock();
+
+        // 1. 3D Scene & Realistic Atmospheric Haze
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x111622);
+        this.scene.fog = new THREE.FogExp2(0x1b1924, 0.0065);
+
+        // 2. 3D Perspective Camera (Sized to the Left Half Viewport Pane)
+        const vpW = this.container.clientWidth || window.innerWidth / 2;
+        const vpH = this.container.clientHeight || window.innerHeight;
+        this.camera = new THREE.PerspectiveCamera(58, vpW / vpH, 0.1, 600);
+        this.cameraMode = 0; // 0: 3D Chase, 1: Action Angle, 2: Isometric 3D, 3: Side 3D
+        this.cameraModesNames = ['3D CHASE', 'ACTION ANGLE', 'ISOMETRIC 3D', 'SIDE 3D'];
+
+        // Mouse 360 Orbit Controls
+        this.isDragging = false;
+        this.orbitYaw = 0;
+        this.orbitPitch = 0.25;
+        this.prevMouse = { x: 0, y: 0 };
+
+        // 3. WebGL Renderer with Realistic ToneMapping & Soft Shadows
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        this.renderer.setSize(vpW, vpH);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.15;
+        this.container.appendChild(this.renderer.domElement);
+
+        // 4. Build Realistic Lights, PBR Environment, and Stickman Player
+        this.setupLights();
+        this.build3DEnvironment();
+
+        this.player = new StickmanRig3D(0x00ffff, false);
+        this.player.root.position.set(0, 0, 0);
+        this.scene.add(this.player.root);
+
+        // Shield 3D Sphere around Player
+        const shieldGeo = new THREE.SphereGeometry(1.8, 24, 24);
+        const shieldMat = new THREE.MeshBasicMaterial({
+          color: 0x00ffff,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.0
+        });
+        this.shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
+        this.shieldMesh.position.y = 2.0;
+        this.player.root.add(this.shieldMesh);
+
+        // Gameplay State
+        this.isGameStarted = false;
+        this.currentLevel = '1_1';
+        this.lives = 3;
+        this.score = 0;
+        this.combo = 1;
+        this.orbsCollected = 0;
+        this.hasShield = false;
+
+        this.lanes = [-3.2, 0, 3.2];
+        this.currentLane = 1;
+        this.targetX = 0;
+        this.isJumping = false;
+        this.jumpTimer = 0;
+
+        this.totalStageEnemies = 10;
+        this.defeatedEnemiesCount = 0;
+        this.currentDrillIndex = 0;
+
+        // Phases: 'LEARNING' | 'APPROACH' | 'CLASH_QUIZ' | 'FINISHER'
+        this.roundPhase = 'LEARNING';
+        this.learningTimer = 0;
+        this.learningDuration = 45;
+        this.finisherTimer = 0;
+        this.finisherWinner = 'player';
+
+        this.enemyRig = null;
+        this.parkourItems = [];
+        this.particles3D = [];
+        this.spawnItemTimer = 0;
+        this.cameraShake = 0;
+
+        this.bindEvents();
+        window.renderStageList();
+        this.animate();
+      }
+
+      setupLights() {
+        // Realistic Golden-Hour Sunset & Twilight Sky Hemisphere Light
+        const hemiLight = new THREE.HemisphereLight(0xffb480, 0x1a2436, 0.95);
+        this.scene.add(hemiLight);
+
+        // Warm Low-Angle Golden Sunset Directional Sun with crisp shadows
+        const sunLight = new THREE.DirectionalLight(0xff9e5e, 2.2);
+        sunLight.position.set(22, 38, -75);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 1;
+        sunLight.shadow.camera.far = 200;
+        const d = 25;
+        sunLight.shadow.camera.left = -d;
+        sunLight.shadow.camera.right = d;
+        sunLight.shadow.camera.top = d;
+        sunLight.shadow.camera.bottom = -d;
+        this.scene.add(sunLight);
+
+        // Subtle Rim Light for Stickman & Bridge Architecture
+        this.playerLight = new THREE.PointLight(0x38bdf8, 1.8, 18);
+        this.playerLight.position.set(0, 4.2, 2.5);
+        this.scene.add(this.playerLight);
+
+        this.clashLight = new THREE.PointLight(0xffaa33, 0, 24);
+        this.clashLight.position.set(0, 3.2, -1.5);
+        this.scene.add(this.clashLight);
+      }
+
+      build3DEnvironment() {
+        this.stoneTex = createRealisticStoneTexture();
+        const woodTex = createRealisticWoodTexture();
+        const skyTex = createRealisticSunsetSkyTexture();
+
+        // 1. Realistic Weathered Stone Samurai Bridge Deck & Balustrades
+        const bridgeGroup = new THREE.Group();
+        const roadGeo = new THREE.BoxGeometry(11.4, 0.8, 300);
+        const roadMat = new THREE.MeshStandardMaterial({
+          map: this.stoneTex,
+          bumpMap: this.stoneTex,
+          bumpScale: 0.06,
+          roughness: 0.72,
+          metalness: 0.15
+        });
+        const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+        roadMesh.position.set(0, -0.4, -120);
+        roadMesh.receiveShadow = true;
+        bridgeGroup.add(roadMesh);
+
+        // Subtle Bronze Inlaid Lane Guide Strips on the Stone Deck
+        const stripGeo = new THREE.BoxGeometry(0.1, 0.03, 300);
+        const bronzeStripMat = new THREE.MeshStandardMaterial({
+          color: 0xd97706,
+          roughness: 0.35,
+          metalness: 0.85,
+          emissive: 0x78350f,
+          emissiveIntensity: 0.25
+        });
+
+        [-1.6, 1.6].forEach(x => {
+          const strip = new THREE.Mesh(stripGeo, bronzeStripMat);
+          strip.position.set(x, 0.015, -120);
+          bridgeGroup.add(strip);
+        });
+
+        // Heavy Carved Stone Curb & Lacquered Wooden Handrails
+        const curbMat = new THREE.MeshStandardMaterial({
+          color: 0x3b4252,
+          roughness: 0.8,
+          metalness: 0.1
+        });
+        const railWoodMat = new THREE.MeshStandardMaterial({
+          map: woodTex,
+          roughness: 0.45,
+          metalness: 0.15
+        });
+
+        [-5.45, 5.45].forEach(x => {
+          const curb = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.45, 300), curbMat);
+          curb.position.set(x, 0.22, -120);
+          curb.receiveShadow = true;
+          bridgeGroup.add(curb);
+
+          const topRail = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 300, 12), railWoodMat);
+          topRail.rotation.x = Math.PI / 2;
+          topRail.position.set(x, 1.05, -120);
+          topRail.castShadow = true;
+          bridgeGroup.add(topRail);
+        });
+        this.scene.add(bridgeGroup);
+
+        // 2. Realistic Reflective Calm River / Lake Surface Below the Bridge
+        const waterGeo = new THREE.PlaneGeometry(500, 450, 48, 48);
+        const waterMat = new THREE.MeshStandardMaterial({
+          color: 0x0f1d2e,
+          roughness: 0.14,
+          metalness: 0.88,
+          bumpMap: this.stoneTex,
+          bumpScale: 0.03
+        });
+        this.waterMesh = new THREE.Mesh(waterGeo, waterMat);
+        this.waterMesh.rotation.x = -Math.PI / 2;
+        this.waterMesh.position.set(0, -6.5, -120);
+        this.waterMesh.receiveShadow = true;
+        this.scene.add(this.waterMesh);
+
+        // 3. Realistic Traditional Lacquered Wood Torii Gates & Stone Lanterns
+        this.toriiGates = [];
+        const pillarMat = new THREE.MeshStandardMaterial({
+          map: woodTex,
+          roughness: 0.42,
+          metalness: 0.12
+        });
+        const darkTimberMat = new THREE.MeshStandardMaterial({
+          color: 0x18181b,
+          roughness: 0.55,
+          metalness: 0.3
+        });
+        const goldFittingMat = new THREE.MeshStandardMaterial({
+          color: 0xfbbf24,
+          roughness: 0.25,
+          metalness: 0.9
+        });
+        const lanternGlowMat = new THREE.MeshStandardMaterial({
+          color: 0xffedd5,
+          emissive: 0xff9933,
+          emissiveIntensity: 1.4
+        });
+
+        for (let i = 0; i < 12; i++) {
+          const gate = new THREE.Group();
+
+          // Stone Pedestal Bases (Kamebara)
+          [-5.25, 5.25].forEach(x => {
+            const base = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, 1.1, 16), curbMat);
+            base.position.set(x, 0.55, 0);
+            base.castShadow = true;
+            base.receiveShadow = true;
+            gate.add(base);
+
+            const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.44, 8.8, 16), pillarMat);
+            pillar.position.set(x, 4.6, 0);
+            pillar.castShadow = true;
+            pillar.receiveShadow = true;
+            gate.add(pillar);
+
+            // Gold Collar Fitting
+            const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.25, 16), goldFittingMat);
+            collar.position.set(x, 7.2, 0);
+            gate.add(collar);
+
+            // Traditional Stone Lantern beside each pillar
+            const lanternPost = new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.4, 0.42), curbMat);
+            lanternPost.position.set(x > 0 ? 4.85 : -4.85, 0.7, 3.5);
+            gate.add(lanternPost);
+
+            const lanternLightBox = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.38, 0.36), lanternGlowMat);
+            lanternLightBox.position.set(x > 0 ? 4.85 : -4.85, 1.55, 3.5);
+            gate.add(lanternLightBox);
+
+            const lanternRoof = new THREE.Mesh(new THREE.ConeGeometry(0.48, 0.35, 4), darkTimberMat);
+            lanternRoof.position.set(x > 0 ? 4.85 : -4.85, 1.9, 3.5);
+            lanternRoof.rotation.y = Math.PI / 4;
+            gate.add(lanternRoof);
+          });
+
+          // Upper Kasagi Roof Beam & Shimaki
+          const kasagiRoof = new THREE.Mesh(new THREE.BoxGeometry(14.2, 0.45, 0.9), darkTimberMat);
+          kasagiRoof.position.set(0, 9.25, 0);
+          kasagiRoof.castShadow = true;
+
+          const mainBeam = new THREE.Mesh(new THREE.BoxGeometry(13.6, 0.52, 0.72), pillarMat);
+          mainBeam.position.set(0, 8.8, 0);
+          mainBeam.castShadow = true;
+
+          // Lower貫 (Nuki) Crossbeam
+          const subBeam = new THREE.Mesh(new THREE.BoxGeometry(11.8, 0.38, 0.48), pillarMat);
+          subBeam.position.set(0, 7.2, 0);
+          subBeam.castShadow = true;
+
+          // Center Strut (Gakuzuka) with Gold Tablet
+          const centerStrut = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.6, 0.4), pillarMat);
+          centerStrut.position.set(0, 8.0, 0);
+          const goldPlaque = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.85, 0.46), goldFittingMat);
+          goldPlaque.position.set(0, 8.0, 0);
+
+          gate.add(kasagiRoof, mainBeam, subBeam, centerStrut, goldPlaque);
+          gate.position.z = -i * 22;
+          this.scene.add(gate);
+          this.toriiGates.push(gate);
+        }
+
+        // 4. Realistic Rugged Alpine Granite & Snow-Capped Mountains
+        this.mountains = [];
+        const rockMat = new THREE.MeshStandardMaterial({
+          color: 0x262c3a,
+          roughness: 0.88,
+          metalness: 0.08,
+          flatShading: true
+        });
+        const snowCapMat = new THREE.MeshStandardMaterial({
+          color: 0xdbeafe,
+          roughness: 0.55,
+          metalness: 0.05,
+          flatShading: true
+        });
+
+        for (let i = 0; i < 24; i++) {
+          const mtGroup = new THREE.Group();
+          const radius = 14 + Math.random() * 16;
+          const height = 26 + Math.random() * 42;
+          const geo = new THREE.ConeGeometry(radius, height, 7);
+          const mt = new THREE.Mesh(geo, rockMat);
+          mtGroup.add(mt);
+
+          // Realistic Snow / Mist Peak Cap
+          const capGeo = new THREE.ConeGeometry(radius * 0.42, height * 0.42, 7);
+          const cap = new THREE.Mesh(capGeo, snowCapMat);
+          cap.position.y = height * 0.295;
+          mtGroup.add(cap);
+
+          const side = i % 2 === 0 ? -1 : 1;
+          mtGroup.position.set(side * (28 + Math.random() * 38), height / 2 - 7, -i * 11);
+          mtGroup.rotation.y = Math.random() * Math.PI;
+          this.scene.add(mtGroup);
+          this.mountains.push(mtGroup);
+        }
+
+        // 5. Realistic Sunset Solar Disc & Sky Dome
+        const sunGeo = new THREE.SphereGeometry(28, 32, 32);
+        const sunMat = new THREE.MeshBasicMaterial({ color: 0xffb36b });
+        this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
+        this.sunMesh.position.set(0, 24, -245);
+        this.scene.add(this.sunMesh);
+
+        const skyGeo = new THREE.PlaneGeometry(520, 260);
+        const skyMat = new THREE.MeshBasicMaterial({ map: skyTex, depthWrite: false, fog: false });
+        const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+        skyMesh.position.set(0, 52, -265);
+        this.scene.add(skyMesh);
+
+        // 6. Floating Atmospheric Sakura Petals / Warm Sunset Embers
+        this.ambientPetals = [];
+        const petalGeo = new THREE.PlaneGeometry(0.18, 0.12);
+        const petalMat = new THREE.MeshBasicMaterial({
+          color: 0xfda4af,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.75
+        });
+        for (let i = 0; i < 65; i++) {
+          const petal = new THREE.Mesh(petalGeo, petalMat);
+          petal.position.set(
+            (Math.random() - 0.5) * 26,
+            1 + Math.random() * 12,
+            -Math.random() * 90
+          );
+          petal.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+          this.scene.add(petal);
+          this.ambientPetals.push({
+            mesh: petal,
+            driftX: (Math.random() - 0.5) * 1.8,
+            fallY: 0.6 + Math.random() * 1.2,
+            spin: 1.5 + Math.random() * 2.5
+          });
+        }
+      }
+
+      resizeViewport() {
+        if (!this.container) return;
+        const w = this.container.clientWidth || window.innerWidth / 2;
+        const h = this.container.clientHeight || window.innerHeight;
+        this.camera.aspect = w / h;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(w, h);
+      }
+
+      bindEvents() {
+        window.addEventListener('resize', () => this.resizeViewport());
+
+        if (window.ResizeObserver) {
+          const ro = new ResizeObserver(() => this.resizeViewport());
+          ro.observe(this.container);
+        }
+
+        // Mouse Drag 360 Orbit on Left 3D Viewport
+        this.container.addEventListener('mousedown', (e) => {
+          this.isDragging = true;
+          this.prevMouse = { x: e.clientX, y: e.clientY };
+        });
+        window.addEventListener('mousemove', (e) => {
+          if (!this.isDragging) return;
+          const dx = e.clientX - this.prevMouse.x;
+          const dy = e.clientY - this.prevMouse.y;
+          this.prevMouse = { x: e.clientX, y: e.clientY };
+          this.orbitYaw -= dx * 0.007;
+          this.orbitPitch = Math.max(0.08, Math.min(1.15, this.orbitPitch + dy * 0.006));
+        });
+        window.addEventListener('mouseup', () => {
+          this.isDragging = false;
+        });
+
+        // Keyboard Controls (ArrowLeft = Move Left, ArrowRight = Move Right, ArrowUp = Jump)
+        window.addEventListener('keydown', (e) => {
+          const inputEl = document.getElementById('answerInput');
+          if (document.activeElement === inputEl) return;
+
+          if (e.key === 'c' || e.key === 'C') {
+            this.cycleCamera();
+            return;
+          }
+
+          if (document.getElementById('endModal').classList.contains('active')) {
+            if (e.key === 'r' || e.key === 'R' || e.code === 'Space') {
+              e.preventDefault();
+              window.retryCurrentLevel();
+            }
+            return;
+          }
+
+          if (!this.isGameStarted) return;
+
+          if (this.roundPhase === 'LEARNING') {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+              e.preventDefault();
+              this.currentLane = Math.max(0, this.currentLane - 1);
+              this.targetX = this.lanes[this.currentLane];
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+              e.preventDefault();
+              this.currentLane = Math.min(2, this.currentLane + 1);
+              this.targetX = this.lanes[this.currentLane];
+            } else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+              e.preventDefault();
+              if (!this.isJumping) {
+                this.isJumping = true;
+                this.jumpTimer = 0;
+              }
+            } else if (e.code === 'Space' || e.key === 'Enter') {
+              e.preventDefault();
+              this.transitionToCombat();
+            }
+          }
+        });
+      }
+
+      cycleCamera() {
+        this.cameraMode = (this.cameraMode + 1) % this.cameraModesNames.length;
+        this.orbitYaw = 0;
+        document.getElementById('camLabel').innerText = this.cameraModesNames[this.cameraMode];
+      }
+
+      startLevel(levelId) {
+        this.currentLevel = String(levelId);
+        this.lives = 3;
+        this.score = 0;
+        this.combo = 1;
+        this.orbsCollected = 0;
+        this.hasShield = false;
+        this.shieldMesh.material.opacity = 0;
+
+        this.defeatedEnemiesCount = 0;
+        this.currentDrillIndex = 0;
+        this.currentLane = 1;
+        this.targetX = 0;
+        this.player.root.position.set(0, 0, 0);
+
+        this.clearEnemy();
+        this.clearParkourItems();
+        this.isGameStarted = true;
+        this.updateHUD();
+        this.enterLearningPhase(45);
+      }
+
+      enterLearningPhase(seconds = 45) {
+        this.roundPhase = 'LEARNING';
+        this.learningDuration = seconds;
+        this.learningTimer = 0;
+        this.clearEnemy();
+
+        document.getElementById('arenaPhaseTag').innerText = '3D ARENA • PARKOUR SPRINT';
+        document.getElementById('summonEnemyBtn').disabled = false;
+
+        // Show only the Learning Module and hide the Answering Module
+        window.showLearningModuleOnly();
+
+        const stageData = STAGE_QUESTIONS[this.currentLevel] || STAGE_QUESTIONS['1_1'];
+        const drill = stageData.drills[this.currentDrillIndex];
+        if (drill) {
+          document.getElementById('wbCounter').innerText = `CONCEPT ${this.currentDrillIndex + 1} OF 10`;
+          document.getElementById('wbTitle').innerText = drill.conceptTitle;
+          document.getElementById('wbCode').innerText = drill.conceptSyntax;
+          document.getElementById('wbDesc').innerText = drill.conceptDesc;
+        }
+      }
+
+      transitionToCombat() {
+        if (this.roundPhase !== 'LEARNING') return;
+        this.clearParkourItems();
+
+        document.getElementById('arenaPhaseTag').innerText = '3D ARENA • ENEMY INTERCEPT';
+        document.getElementById('summonEnemyBtn').disabled = true;
+
+        // Hide the Learning Module as soon as combat approach starts
+        document.getElementById('wisdomBanner').style.display = 'none';
+
+        // Center player on bridge for 3D duel
+        this.currentLane = 1;
+        this.targetX = 0;
+        this.roundPhase = 'APPROACH';
+
+        // Spawn 3D Enemy (Boss on targets 5 & 10)
+        const isBoss = ((this.defeatedEnemiesCount + 1) % 5 === 0);
+        const enemyColor = isBoss ? 0xffaa00 : 0xff0033;
+        this.enemyRig = new StickmanRig3D(enemyColor, isBoss);
+        this.enemyRig.root.position.set(0, 12, -28); // Drops down from sky onto bridge
+        this.enemyRig.root.rotation.y = Math.PI; // Face player (+Z)
+        this.scene.add(this.enemyRig.root);
+      }
+
+      triggerQuizClash() {
+        this.roundPhase = 'CLASH_QUIZ';
+        this.clashLight.intensity = 4.0;
+        document.getElementById('arenaPhaseTag').innerText = '3D ARENA • KATANA CLASH LOCKED';
+        this.spawn3DSparks(0, 2.4, -1.3, 35, 0x00ffff);
+
+        const stageData = STAGE_QUESTIONS[this.currentLevel] || STAGE_QUESTIONS['1_1'];
+        const drill = stageData.drills[this.currentDrillIndex];
+        window.openQuizModal({
+          topic: `${stageData.topic} • TARGET ${this.currentDrillIndex + 1}/10`,
+          q: drill.q,
+          ans: drill.ans,
+          hints: drill.hints
+        });
+      }
+
+      resolveQuizOutcome(isCorrect) {
+        this.clashLight.intensity = 0;
+        this.roundPhase = 'FINISHER';
+        this.finisherTimer = 0;
+
+        if (isCorrect) {
+          this.finisherWinner = 'player';
+          this.defeatedEnemiesCount++;
+          this.currentDrillIndex++;
+          this.score += 250 * this.combo;
+          this.combo++;
+          this.cameraShake = 0.8;
+          document.getElementById('arenaPhaseTag').innerText = '3D ARENA • CRITICAL STRIKE!';
+
+          // Spawn 3D Decapitation & Sparks
+          this.spawn3DSparks(0, 2.5, -2.2, 65, 0x00ffff);
+          this.spawn3DSparks(0, 2.5, -2.2, 45, 0xffaa33);
+
+          // Save stars
+          const cleared = JSON.parse(localStorage.getItem('shinobi_stars_v2') || '{}');
+          cleared[this.currentLevel] = Math.max(cleared[this.currentLevel] || 0, this.defeatedEnemiesCount);
+          localStorage.setItem('shinobi_stars_v2', JSON.stringify(cleared));
+        } else {
+          if (this.hasShield) {
+            this.hasShield = false;
+            this.orbsCollected = 0;
+            this.shieldMesh.material.opacity = 0;
+            this.finisherWinner = 'shield_saved';
+            document.getElementById('arenaPhaseTag').innerText = '3D ARENA • SHIELD ABSORBED HIT!';
+            this.spawn3DSparks(0, 2.2, 0, 50, 0xffd700);
+          } else {
+            this.finisherWinner = 'enemy';
+            this.lives--;
+            this.combo = 1;
+            this.cameraShake = 1.1;
+            document.getElementById('arenaPhaseTag').innerText = '3D ARENA • DAMAGE TAKEN!';
+            this.spawn3DSparks(0, 2.2, 0, 60, 0xff0033);
+          }
+        }
+        this.updateHUD();
+      }
+
+      spawnParkourObject() {
+        const laneIdx = Math.floor(Math.random() * 3);
+        const x = this.lanes[laneIdx];
+        const isOrb = Math.random() < 0.68;
+
+        if (isOrb) {
+          // 3D Glowing Chakra Data Crystal
+          const mesh = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.55, 0),
+            new THREE.MeshStandardMaterial({
+              color: 0x38bdf8,
+              emissive: 0x00f0ff,
+              emissiveIntensity: 0.85,
+              roughness: 0.15,
+              metalness: 0.8
+            })
+          );
+          mesh.position.set(x, 1.4, -75);
+          this.scene.add(mesh);
+          this.parkourItems.push({ mesh, type: 'orb', active: true });
+        } else {
+          // 3D Realistic Metallic Barricade / Laser Hurdle
+          const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(2.6, 1.05, 0.35),
+            new THREE.MeshStandardMaterial({
+              color: 0xef4444,
+              emissive: 0xdc2626,
+              emissiveIntensity: 0.75,
+              roughness: 0.3,
+              metalness: 0.6
+            })
+          );
+          mesh.position.set(x, 0.65, -75);
+          this.scene.add(mesh);
+          this.parkourItems.push({ mesh, type: 'laser', active: true });
+        }
+      }
+
+      spawn3DSparks(x, y, z, count = 30, colorHex = 0x00ffff) {
+        const geo = new THREE.BoxGeometry(0.14, 0.14, 0.14);
+        const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+        for (let i = 0; i < count; i++) {
+          const p = new THREE.Mesh(geo, mat);
+          p.position.set(x, y, z);
+          const vx = (Math.random() - 0.5) * 14;
+          const vy = Math.random() * 10 + 2;
+          const vz = (Math.random() - 0.5) * 14;
+          this.scene.add(p);
+          this.particles3D.push({ mesh: p, vx, vy, vz, life: 1.0 });
+        }
+      }
+
+      clearEnemy() {
+        if (this.enemyRig) {
+          this.scene.remove(this.enemyRig.root);
+          this.enemyRig = null;
+        }
+      }
+
+      clearParkourItems() {
+        this.parkourItems.forEach(item => this.scene.remove(item.mesh));
+        this.parkourItems = [];
+      }
+
+      updateHUD() {
+        const hearts = document.querySelectorAll('#heartsContainer .orb-heart');
+        hearts.forEach((h, idx) => {
+          if (idx < this.lives) h.classList.remove('lost');
+          else h.classList.add('lost');
+        });
+
+        document.getElementById('hudCombo').innerText = `x${this.combo}`;
+        document.getElementById('hudShield').innerText = this.hasShield ? 'ACTIVE' : `${this.orbsCollected}/5`;
+        document.getElementById('hudScore').innerText = this.score;
+
+        const stageData = STAGE_QUESTIONS[this.currentLevel] || STAGE_QUESTIONS['1_1'];
+        document.getElementById('hudTopicTitle').innerText = `C++ ARENA: ${stageData.topic.toUpperCase()}`;
+        document.getElementById('hudProgressFill').style.width = `${(this.defeatedEnemiesCount / this.totalStageEnemies) * 100}%`;
+        document.getElementById('hudTargetCount').innerText = `${this.defeatedEnemiesCount} / ${this.totalStageEnemies} TARGETS`;
+      }
+
+      showEndModal(won) {
+        this.isGameStarted = false;
+        const modal = document.getElementById('endModal');
+        const title = document.getElementById('endTitle');
+        const sub = document.getElementById('endSub');
+
+        if (won) {
+          title.innerText = '⭐ ALL 10 TARGETS MASTERED! ⭐';
+          title.style.color = '#38bdf8';
+          sub.innerText = `FINAL SCORE: ${this.score} • NEXT LEVEL UNLOCKED`;
+        } else {
+          title.innerText = 'MISSION FAILED: DEFEATED';
+          title.style.color = '#ef4444';
+          sub.innerText = `TARGETS DEFEATED: ${this.defeatedEnemiesCount} / 10 • SCORE: ${this.score}`;
+        }
+        modal.classList.add('active');
+      }
+
+      updateCamera(time, dt) {
+        let desiredPos = new THREE.Vector3();
+        let lookTarget = new THREE.Vector3(this.player.root.position.x * 0.4, 2.2, -4);
+
+        if (!this.isGameStarted) {
+          // Dramatic 3D Menu Showcase Orbit
+          const angle = time * 0.45 + this.orbitYaw;
+          desiredPos.set(Math.sin(angle) * 8.5, 4.2, Math.cos(angle) * 8.5);
+          lookTarget.set(0, 2.0, -2);
+        } else if (this.roundPhase === 'CLASH_QUIZ') {
+          // Unobstructed 3D Circling Duel Camera around locked swords
+          const duelAngle = Math.sin(time * 0.6) * 0.75 + 0.65 + this.orbitYaw;
+          desiredPos.set(Math.sin(duelAngle) * 6.5, 3.1, -1.2 + Math.cos(duelAngle) * 5.5);
+          lookTarget.set(0, 2.3, -1.3);
+        } else if (this.roundPhase === 'FINISHER') {
+          // Close-up 3D Slash Kill-Cam
+          desiredPos.set(4.2, 2.6, 2.5);
+          lookTarget.set(0, 2.2, -2.0);
+        } else {
+          // 4 Selectable 3D Camera Perspectives + Mouse Orbit Offset
+          const px = this.player.root.position.x;
+          if (this.cameraMode === 0) {
+            desiredPos.set(px * 0.65 + Math.sin(this.orbitYaw) * 9, 4.6 + this.orbitPitch * 3, 8.8 * Math.cos(this.orbitYaw));
+          } else if (this.cameraMode === 1) {
+            desiredPos.set(px + 3.2, 3.2, 6.2);
+          } else if (this.cameraMode === 2) {
+            desiredPos.set(10.5, 10.5, 10.5);
+          } else {
+            desiredPos.set(11.5, 3.8, -2.0);
+            lookTarget.set(0, 2.2, -3.0);
+          }
+        }
+
+        if (this.cameraShake > 0.01) {
+          desiredPos.x += (Math.random() - 0.5) * this.cameraShake;
+          desiredPos.y += (Math.random() - 0.5) * this.cameraShake;
+          this.cameraShake *= 0.88;
+        }
+
+        this.camera.position.lerp(desiredPos, Math.min(1, dt * 6));
+        this.camera.lookAt(lookTarget);
+      }
+
+      animate() {
+        requestAnimationFrame(() => this.animate());
+
+        const dt = Math.min(this.clock.getDelta(), 0.1);
+        const time = this.clock.getElapsedTime();
+
+        // Scroll 3D World when sprinting (Menu or Learning/Approach Phase)
+        const isSprinting = !this.isGameStarted || this.roundPhase === 'LEARNING' || this.roundPhase === 'APPROACH';
+        const worldSpeed = isSprinting ? 28 : 0;
+
+        if (worldSpeed > 0) {
+          if (this.stoneTex) {
+            this.stoneTex.offset.y -= dt * 3.8;
+          }
+
+          // Move 3D Torii Gates toward camera in +Z
+          this.toriiGates.forEach(gate => {
+            gate.position.z += worldSpeed * dt;
+            if (gate.position.z > 14) gate.position.z -= 12 * 22;
+          });
+
+          // Move 3D Mountains toward camera
+          this.mountains.forEach(mt => {
+            mt.position.z += worldSpeed * dt;
+            if (mt.position.z > 20) mt.position.z -= 24 * 11;
+          });
+        }
+
+        // Animate Floating Sakura Petals
+        this.ambientPetals.forEach(p => {
+          p.mesh.position.x += p.driftX * dt;
+          p.mesh.position.y -= p.fallY * dt;
+          p.mesh.position.z += (worldSpeed * 0.4 + 3) * dt;
+          p.mesh.rotation.x += p.spin * dt;
+          p.mesh.rotation.y += p.spin * dt;
+          if (p.mesh.position.y < 0.2 || p.mesh.position.z > 12) {
+            p.mesh.position.set((Math.random() - 0.5) * 24, 9 + Math.random() * 6, -65 - Math.random() * 25);
+          }
+        });
+
+        // Smooth 3D Lane Movement & Jump Physics
+        const prevX = this.player.root.position.x;
+        this.player.root.position.x += (this.targetX - prevX) * Math.min(1, dt * 12);
+        const laneTilt = (prevX - this.targetX) * 0.18;
+
+        let jumpProgress = 0;
+        if (this.isJumping) {
+          this.jumpTimer += dt * 1.85;
+          if (this.jumpTimer >= 1) {
+            this.isJumping = false;
+            this.jumpTimer = 0;
+          } else {
+            jumpProgress = this.jumpTimer;
+          }
+        }
+
+        // Animate Player Rig
+        if (this.roundPhase === 'CLASH_QUIZ') {
+          this.player.animateClashStance(time, false, 0);
+          if (this.enemyRig) {
+            this.enemyRig.animateClashStance(time, false, 0);
+            if (Math.random() < 0.35) this.spawn3DSparks(0, 2.5, -1.3, 2, 0xffaa00);
+          }
+        } else if (this.roundPhase === 'FINISHER') {
+          this.finisherTimer += dt;
+          const p = Math.min(1, this.finisherTimer / 1.1);
+          if (this.finisherWinner === 'player') {
+            this.player.animateClashStance(time, true, p);
+            this.player.root.position.z = -p * 5.5;
+            if (this.enemyRig) {
+              this.enemyRig.headGroup.position.y += dt * 7;
+              this.enemyRig.headGroup.position.x += dt * 4;
+              this.enemyRig.headGroup.rotation.z += dt * 10;
+              this.enemyRig.root.rotation.x = -p * 1.4;
+            }
+          } else {
+            if (this.enemyRig) this.enemyRig.animateClashStance(time, true, p);
+          }
+
+          if (this.finisherTimer >= 1.2) {
+            this.player.root.position.z = 0;
+            this.clearEnemy();
+            if (this.defeatedEnemiesCount >= this.totalStageEnemies) {
+              this.showEndModal(true);
+            } else if (this.lives <= 0) {
+              this.showEndModal(false);
+            } else {
+              this.enterLearningPhase(this.finisherWinner === 'player' ? 45 : 15);
+            }
+          }
+        } else {
+          this.player.animateSprint(time, jumpProgress, laneTilt);
+        }
+
+        // Handle Active Game Phases
+        if (this.isGameStarted) {
+          if (this.roundPhase === 'LEARNING') {
+            this.learningTimer += dt;
+            const left = Math.max(0, this.learningDuration - this.learningTimer);
+            document.getElementById('wbTimerFill').style.width = `${(left / this.learningDuration) * 100}%`;
+            document.getElementById('wbTimeText').innerText = `PARKOUR STUDY WINDOW: ${Math.ceil(left)}s`;
+
+            // Spawn & Update 3D Parkour Orbs and Lasers
+            this.spawnItemTimer += dt;
+            if (this.spawnItemTimer > 1.15) {
+              this.spawnParkourObject();
+              this.spawnItemTimer = 0;
+            }
+
+            for (let i = this.parkourItems.length - 1; i >= 0; i--) {
+              const item = this.parkourItems[i];
+              item.mesh.position.z += worldSpeed * dt;
+              if (item.type === 'orb') item.mesh.rotation.y += dt * 3;
+
+              // 3D Collision Check with Player
+              const dz = Math.abs(item.mesh.position.z - this.player.root.position.z);
+              const dx = Math.abs(item.mesh.position.x - this.player.root.position.x);
+              if (item.active && dz < 1.1 && dx < 1.1) {
+                if (item.type === 'orb') {
+                  item.active = false;
+                  this.scene.remove(item.mesh);
+                  this.score += 50 * this.combo;
+                  if (!this.hasShield) {
+                    this.orbsCollected++;
+                    if (this.orbsCollected >= 5) {
+                      this.hasShield = true;
+                      this.shieldMesh.material.opacity = 0.35;
+                    }
+                  }
+                  this.spawn3DSparks(this.player.root.position.x, 2, 0, 12, 0x00ffff);
+                  this.updateHUD();
+                } else if (item.type === 'laser' && jumpProgress < 0.25) {
+                  item.active = false;
+                  this.scene.remove(item.mesh);
+                  this.combo = 1;
+                  this.cameraShake = 0.6;
+                  this.spawn3DSparks(this.player.root.position.x, 1.2, 0, 20, 0xff0033);
+                  this.updateHUD();
+                }
+              }
+
+              if (item.mesh.position.z > 10) {
+                this.scene.remove(item.mesh);
+                this.parkourItems.splice(i, 1);
+              }
+            }
+
+            if (this.learningTimer >= this.learningDuration) {
+              this.transitionToCombat();
+            }
+          } else if (this.roundPhase === 'APPROACH' && this.enemyRig) {
+            if (this.enemyRig.root.position.y > 0) {
+              this.enemyRig.root.position.y = Math.max(0, this.enemyRig.root.position.y - dt * 35);
+            }
+            this.enemyRig.animateSprint(time, 0, 0);
+            this.enemyRig.root.position.z += dt * 26;
+            if (this.enemyRig.root.position.z >= -2.5) {
+              this.enemyRig.root.position.z = -2.5;
+              this.triggerQuizClash();
+            }
+          }
+        }
+
+        // Update 3D Sparks / Debris Particles
+        for (let i = this.particles3D.length - 1; i >= 0; i--) {
+          const p = this.particles3D[i];
+          p.mesh.position.x += p.vx * dt;
+          p.mesh.position.y += p.vy * dt;
+          p.mesh.position.z += p.vz * dt;
+          p.vy -= 22 * dt;
+          p.mesh.rotation.x += 6 * dt;
+          p.mesh.rotation.y += 6 * dt;
+          p.life -= dt * 1.6;
+          p.mesh.scale.setScalar(Math.max(0.01, p.life));
+          if (p.life <= 0) {
+            this.scene.remove(p.mesh);
+            this.particles3D.splice(i, 1);
+          }
+        }
+
+        this.shieldMesh.rotation.y += dt * 1.5;
+        this.updateCamera(time, dt);
+        this.renderer.render(this.scene, this.camera);
+      }
+    }
+
+    window.onload = function() {
+      window.ninja3D = new ShinobiWorld3D();
+    };
+  </script>
+</body>
+</html>
